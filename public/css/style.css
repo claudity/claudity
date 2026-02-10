@@ -1,0 +1,1672 @@
+@font-face {
+  font-family: 'berkeley';
+  src: url('../font/berkeley.woff2') format('woff2');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+:root {
+  --black: #000;
+  --bg: #0a0a0a;
+  --bg-raised: #141414;
+  --bg-hover: #1a1a1a;
+  --white: #b0b0b0;
+  --bright: #d4d4d4;
+  --muted: #505050;
+  --accent: #00FF88;
+  --glow: 0, 255, 136;
+  --danger: #ef4444;
+  --amber: #f59e0b;
+  --border: rgba(80, 80, 80, 0.3);
+  --radius: 8px;
+  --radius-lg: 12px;
+  --icon: 13px;
+  --header-h: 4.5rem;
+}
+
+[data-theme="light"] {
+  --black: #ffffff;
+  --bg: #f5f5f5;
+  --bg-raised: #e5e5e5;
+  --bg-hover: #ebebeb;
+  --white: #404040;
+  --bright: #1a1a1a;
+  --muted: #909090;
+  --accent: #059669;
+  --glow: 5, 150, 105;
+}
+
+html, body {
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  font-family: 'berkeley', monospace;
+  -webkit-text-stroke: 0px;
+  background: var(--black);
+  color: var(--white);
+  display: grid;
+  grid-template-columns: 15rem 1fr;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+button[data-action="toggle-nav"] {
+  display: none;
+}
+
+[data-overlay] {
+  display: none;
+}
+
+body[data-screen="setup"] {
+  grid-template-columns: 1fr;
+}
+
+body[data-screen="setup"] button[data-action="toggle-nav"],
+body[data-screen="setup"] nav[aria-label="agents"],
+body[data-screen="setup"] [data-overlay] {
+  display: none;
+}
+
+nav[aria-label="agents"] {
+  background: var(--bg);
+  border-right: 1px solid var(--bg-raised);
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+}
+
+nav[aria-label="agents"] header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem;
+  min-height: var(--header-h);
+}
+
+nav[aria-label="agents"] header h1 {
+  font-size: 14px;
+  -webkit-text-stroke: 0.5px currentColor;
+  color: var(--accent);
+  letter-spacing: 0.05em;
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+}
+
+nav[aria-label="agents"] header h1 span {
+  font-size: 9px;
+  -webkit-text-stroke: 0;
+  color: var(--accent);
+  letter-spacing: 0.06em;
+  background: rgba(var(--glow), 0.1);
+  border: 1px solid rgba(var(--glow), 0.25);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+
+nav[aria-label="agents"] header button {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  cursor: pointer;
+  padding: 0.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius);
+  transition: color 0.2s, background 0.2s, border-color 0.2s;
+}
+
+nav[aria-label="agents"] header button:hover {
+  color: var(--accent);
+  background: rgba(var(--glow), 0.08);
+  border-color: rgba(var(--glow), 0.2);
+}
+
+nav[aria-label="agents"] header button svg {
+  width: var(--icon);
+  height: var(--icon);
+}
+
+nav[aria-label="agents"] ul {
+  list-style: none;
+  flex: 1;
+  overflow-y: auto;
+  padding: 0;
+}
+
+nav[aria-label="agents"] li {
+  padding: 0.5rem 1rem;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--muted);
+  border-left: 2px solid transparent;
+}
+
+nav[aria-label="agents"] li:hover,
+nav[aria-label="agents"] li:focus-visible {
+  background: var(--bg-raised);
+  color: var(--white);
+  outline-offset: -2px;
+}
+
+nav[aria-label="agents"] li[aria-selected="true"] {
+  background: var(--bg-raised);
+  color: var(--accent);
+  border-left-color: var(--accent);
+}
+
+nav[aria-label="agents"] li svg {
+  width: var(--icon);
+  height: var(--icon);
+  flex-shrink: 0;
+}
+
+nav[aria-label="agents"] li span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+nav[aria-label="agents"] li [data-default] {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 6px rgba(var(--glow), 0.5);
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+nav[aria-label="agents"] > footer {
+  border-top: 1px solid var(--bg-raised);
+  padding: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+nav[aria-label="agents"] > footer > button {
+  width: 100%;
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  cursor: pointer;
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--radius);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  font-family: inherit;
+  font-size: 12px;
+  transition: color 0.2s, background 0.2s, border-color 0.2s;
+}
+
+nav[aria-label="agents"] > footer > button:hover {
+  color: var(--white);
+  background: var(--bg-raised);
+  border-color: var(--muted);
+}
+
+nav[aria-label="agents"] > footer > button[aria-selected="true"] {
+  color: var(--accent);
+  background: var(--bg-raised);
+  border-color: rgba(var(--glow), 0.2);
+}
+
+nav[aria-label="agents"] > footer > button svg {
+  width: var(--icon);
+  height: var(--icon);
+  flex-shrink: 0;
+}
+
+[data-toggles] {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+}
+
+[data-toggles] button {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  cursor: pointer;
+  padding: 0.5rem;
+  border-radius: var(--radius);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  font-family: inherit;
+  font-size: 11px;
+  transition: color 0.2s, background 0.2s, border-color 0.2s;
+}
+
+[data-toggles] button:hover {
+  color: var(--white);
+  background: var(--bg-raised);
+  border-color: var(--muted);
+}
+
+[data-toggles] button svg {
+  width: var(--icon);
+  height: var(--icon);
+  flex-shrink: 0;
+}
+
+[data-action="toggle-theme"] [data-icon="sun"] {
+  display: none;
+}
+
+[data-theme="light"] [data-action="toggle-theme"] [data-icon="moon"] {
+  display: none;
+}
+
+[data-theme="light"] [data-action="toggle-theme"] [data-icon="sun"] {
+  display: block;
+}
+
+[data-action="toggle-sound"] [data-icon="sound-off"] {
+  display: none;
+}
+
+[data-sound="off"] [data-action="toggle-sound"] [data-icon="sound-on"] {
+  display: none;
+}
+
+[data-sound="off"] [data-action="toggle-sound"] [data-icon="sound-off"] {
+  display: block;
+}
+
+main {
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+main > section[hidden] {
+  display: none;
+}
+
+section[aria-label="setup"],
+section[aria-label="empty"] {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+}
+
+section[aria-label="setup"] > div,
+section[aria-label="empty"] > div {
+  text-align: center;
+  max-width: 24rem;
+  width: 100%;
+}
+
+section[aria-label="setup"] svg,
+section[aria-label="empty"] svg {
+  width: 28px;
+  height: 28px;
+  color: var(--muted);
+  margin-bottom: 1rem;
+}
+
+section[aria-label="setup"] h2,
+section[aria-label="empty"] h2 {
+  font-size: 14px;
+  font-weight: normal;
+  color: var(--bright);
+  margin-bottom: 0.75rem;
+}
+
+section[aria-label="setup"] p {
+  color: var(--muted);
+  margin-bottom: 1rem;
+  font-size: 12px;
+}
+
+section[aria-label="empty"] p {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+section[aria-label="setup"] pre {
+  background: var(--bg-raised);
+  border: 1px solid var(--muted);
+  border-radius: var(--radius);
+  padding: 0.75rem 1rem;
+  color: var(--accent);
+  font-family: inherit;
+  font-size: 13px;
+  margin-bottom: 1.5rem;
+  user-select: all;
+}
+
+section[aria-label="setup"] [data-setup-alt] {
+  color: var(--muted);
+  font-size: 11px;
+  margin-top: 1.5rem;
+  margin-bottom: 0.5rem;
+}
+
+section[aria-label="setup"] [data-setup-buttons] {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: center;
+}
+
+section[aria-label="setup"] [data-setup-buttons] button {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 12px;
+  padding: 0.5rem 0.75rem;
+  cursor: pointer;
+  transition: color 0.2s, background 0.2s, border-color 0.2s;
+}
+
+section[aria-label="setup"] [data-setup-buttons] button:hover {
+  color: var(--white);
+  background: var(--bg-raised);
+  border-color: var(--muted);
+}
+
+dialog[aria-label="setup token"] p,
+dialog[aria-label="api key"] p {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+dialog[aria-label="setup token"] code,
+dialog[aria-label="api key"] code {
+  background: var(--bg-raised);
+  padding: 1px 5px;
+  border-radius: 4px;
+  color: var(--accent);
+  font-family: inherit;
+}
+
+dialog[aria-label="setup token"] form,
+dialog[aria-label="api key"] form {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+dialog[aria-label="setup token"] input,
+dialog[aria-label="api key"] input {
+  flex: 1;
+  background: var(--bg-raised);
+  border: 1px solid var(--muted);
+  border-radius: var(--radius);
+  color: var(--white);
+  font-family: inherit;
+  font-size: 13px;
+  padding: 0.5rem 0.75rem;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+dialog[aria-label="setup token"] input:focus,
+dialog[aria-label="api key"] input:focus {
+  border-color: rgba(var(--glow), 0.4);
+}
+
+dialog[aria-label="setup token"] input::placeholder,
+dialog[aria-label="api key"] input::placeholder {
+  color: var(--muted);
+}
+
+dialog [data-error] {
+  color: var(--danger);
+  font-size: 11px;
+  margin-top: 0.5rem;
+}
+
+dialog[aria-label="setup token"] button[type="submit"],
+dialog[aria-label="api key"] button[type="submit"] {
+  background: var(--accent);
+  border: none;
+  border-radius: var(--radius);
+  color: var(--black);
+  font-family: inherit;
+  font-size: 12px;
+  padding: 0.5rem 1rem;
+  cursor: pointer;
+  transition: opacity 0.2s;
+  white-space: nowrap;
+}
+
+dialog[aria-label="setup token"] button[type="submit"]:hover,
+dialog[aria-label="api key"] button[type="submit"]:hover {
+  opacity: 0.85;
+}
+
+section[aria-label="setup"] button[data-action="check-auth"] {
+  background: rgba(var(--glow), 0.08);
+  border: 1px solid rgba(var(--glow), 0.2);
+  color: var(--accent);
+  font-family: inherit;
+  font-size: 12px;
+  padding: 0.5rem 1.25rem;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+section[aria-label="setup"] button:hover {
+  background: rgba(var(--glow), 0.12);
+  border-color: rgba(var(--glow), 0.4);
+}
+
+section[aria-label="chat"] {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+}
+
+section[aria-label="chat"] > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.5rem;
+  min-height: var(--header-h);
+  border-bottom: 1px solid var(--bg-raised);
+  flex-shrink: 0;
+}
+
+section[aria-label="chat"] > header > div {
+  min-width: 0;
+}
+
+section[aria-label="chat"] > header h2 {
+  font-size: 14px;
+  font-weight: normal;
+  color: var(--accent);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+section[aria-label="chat"] > header aside {
+  display: flex;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+section[aria-label="chat"] > header aside button {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  cursor: pointer;
+  padding: 0.5rem;
+  border-radius: var(--radius);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.2s, background 0.2s, border-color 0.2s;
+}
+
+section[aria-label="chat"] > header aside button:hover {
+  color: var(--white);
+  background: var(--bg-raised);
+  border-color: var(--muted);
+}
+
+section[aria-label="chat"] > header aside button[data-action="delete-agent"]:hover {
+  color: var(--danger);
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+section[aria-label="chat"] > header aside button svg {
+  width: var(--icon);
+  height: var(--icon);
+}
+
+div[aria-label="messages"] {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+div[aria-label="messages"] > div[data-role="user"] {
+  align-self: flex-end;
+  max-width: 75%;
+}
+
+div[aria-label="messages"] > div[data-role="user"] > p {
+  background: rgba(var(--glow), 0.08);
+  border: 1px solid rgba(var(--glow), 0.12);
+  color: var(--accent);
+  padding: 0.6rem 0.85rem;
+  border-radius: var(--radius-lg) var(--radius-lg) 3px var(--radius-lg);
+  font-size: 13px;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+div[aria-label="messages"] > div[data-role="assistant"] {
+  align-self: flex-start;
+  max-width: 85%;
+}
+
+div[aria-label="messages"] > div[data-role="assistant"] > .msg-body {
+  color: var(--white);
+  font-size: 13px;
+  word-wrap: break-word;
+  line-height: 1.6;
+}
+
+div[aria-label="messages"] > div[data-role="assistant"] > .msg-body p {
+  margin-bottom: 0.5em;
+}
+
+div[aria-label="messages"] > div[data-role="assistant"] > .msg-body p:last-child {
+  margin-bottom: 0;
+}
+
+div[aria-label="messages"] > div[data-role="assistant"] > .msg-body strong {
+  -webkit-text-stroke: 0.4px currentColor;
+}
+
+div[aria-label="messages"] > div[data-role="assistant"] > .msg-body strong a {
+  color: var(--accent);
+}
+
+div[aria-label="messages"] > div[data-role="assistant"] > .msg-body code {
+  background: var(--bg-raised);
+  padding: 2px 5px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+div[aria-label="messages"] > div[data-role="assistant"] > .msg-body pre {
+  background: var(--bg-raised);
+  border-radius: var(--radius);
+  padding: 0.6rem 0.85rem;
+  margin: 0.5em 0;
+  font-size: 12px;
+  overflow-x: auto;
+}
+
+div[aria-label="messages"] > div[data-role="assistant"] > .msg-body pre code {
+  background: none;
+  padding: 0;
+}
+
+div[aria-label="messages"] > div[data-role="assistant"] > .msg-body a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+div[aria-label="messages"] > div[data-role="assistant"] > .msg-body a:hover {
+  text-decoration: underline;
+}
+
+div[aria-label="messages"] > div[data-role="assistant"] > .msg-body ul {
+  list-style: none;
+  padding-left: 1em;
+}
+
+div[aria-label="messages"] > div[data-role="assistant"] > .msg-body li {
+  position: relative;
+  padding-left: 0.5em;
+}
+
+div[aria-label="messages"] > div[data-role="assistant"] > .msg-body li::before {
+  content: '·';
+  position: absolute;
+  left: -0.5em;
+  color: var(--muted);
+}
+
+div[aria-label="messages"] > div[data-role="assistant"] > p {
+  color: var(--white);
+  font-size: 13px;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  line-height: 1.6;
+}
+
+div[aria-label="messages"] > div[data-role="assistant"] details {
+  margin-top: 0.4rem;
+}
+
+div[aria-label="messages"] > div[data-role="assistant"] details summary {
+  font-size: 10px;
+  color: var(--muted);
+  cursor: pointer;
+  user-select: none;
+}
+
+div[aria-label="messages"] > div[data-role="assistant"] details pre {
+  background: var(--bg-raised);
+  border-radius: var(--radius);
+  padding: 0.5rem;
+  margin-top: 0.25rem;
+  font-family: inherit;
+  font-size: 10px;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  max-height: 10rem;
+  overflow-y: auto;
+  color: var(--muted);
+}
+
+div[aria-label="messages"] > div[data-role="error"] > p {
+  color: var(--danger);
+  font-size: 12px;
+}
+
+div[aria-label="messages"] > div[data-activity] {
+  align-self: flex-start;
+  max-width: 85%;
+}
+
+div[aria-label="messages"] > div[data-activity] [data-dots] {
+  display: flex;
+  gap: 5px;
+  padding: 0.5rem 0;
+}
+
+div[aria-label="messages"] > div[data-activity] [data-dots] span {
+  width: 5px;
+  height: 5px;
+  background: var(--muted);
+  border-radius: 50%;
+  animation: bounce 1.2s infinite;
+}
+
+div[aria-label="messages"] > div[data-activity] [data-dots] span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+div[aria-label="messages"] > div[data-activity] [data-dots] span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes bounce {
+  0%, 60%, 100% { opacity: 0.3; transform: translateY(0); }
+  30% { opacity: 1; transform: translateY(-3px); }
+}
+
+div[aria-label="messages"] > div[data-activity] [data-thinking] {
+  color: var(--accent);
+  font-size: 13px;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  line-height: 1.5;
+  opacity: 0.85;
+}
+
+div[aria-label="messages"] > div[data-activity] [data-status] {
+  color: var(--muted);
+  font-size: 11px;
+  margin-top: 4px;
+}
+
+form[aria-label="input"] {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-end;
+  padding: 0.75rem 1.5rem;
+  border-top: 1px solid var(--bg-raised);
+  flex-shrink: 0;
+}
+
+form[aria-label="input"] textarea {
+  flex: 1;
+  background: var(--bg);
+  border: 1px solid var(--bg-raised);
+  border-radius: var(--radius-lg);
+  color: var(--white);
+  font-family: inherit;
+  font-size: 13px;
+  padding: 0.6rem 0.85rem;
+  resize: none;
+  outline: none;
+  transition: border-color 0.2s;
+  line-height: 1.5;
+  max-height: 150px;
+  overflow-y: auto;
+}
+
+form[aria-label="input"] textarea:focus {
+  border-color: rgba(var(--glow), 0.3);
+}
+
+form[aria-label="input"] textarea::placeholder {
+  color: var(--muted);
+}
+
+form[aria-label="input"] button {
+  background: var(--accent);
+  border: none;
+  border-radius: var(--radius-lg);
+  color: var(--black);
+  cursor: pointer;
+  padding: 0.6rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.2s, transform 0.1s;
+  flex-shrink: 0;
+}
+
+form[aria-label="input"] button:hover {
+  opacity: 0.85;
+}
+
+form[aria-label="input"] button:active {
+  transform: scale(0.95);
+}
+
+form[aria-label="input"] button:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+  transform: none;
+}
+
+form[aria-label="input"] button svg {
+  width: 16px;
+  height: 16px;
+}
+
+section[aria-label="connections"] {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+}
+
+section[aria-label="connections"] > header {
+  display: flex;
+  align-items: center;
+  padding: 1rem 1.5rem;
+  min-height: var(--header-h);
+  border-bottom: 1px solid var(--bg-raised);
+  flex-shrink: 0;
+}
+
+section[aria-label="connections"] > header h2 {
+  font-size: 14px;
+  font-weight: normal;
+  color: var(--accent);
+}
+
+section[aria-label="connections"] [data-platforms] {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1.5rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+  gap: 0.75rem;
+  align-content: start;
+}
+
+[data-platforms] article {
+  background: var(--bg);
+  border: 1px solid var(--bg-raised);
+  border-radius: var(--radius-lg);
+  padding: 1rem 1.25rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+}
+
+[data-platforms] article:hover,
+[data-platforms] article:focus-visible {
+  background: var(--bg-hover);
+  border-color: var(--muted);
+}
+
+[data-platforms] article[data-status="connected"] {
+  border-color: rgba(var(--glow), 0.2);
+}
+
+[data-platforms] article[data-status="connected"]:hover {
+  border-color: rgba(var(--glow), 0.4);
+}
+
+[data-platforms] article[data-status="connecting"] {
+  border-color: rgba(245, 158, 11, 0.3);
+}
+
+[data-platforms] article[data-status="error"] {
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+[data-platforms] article svg {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  color: var(--white);
+  transition: color 0.2s;
+}
+
+[data-platforms] article:hover svg {
+  color: var(--bright);
+}
+
+[data-platforms] article > div {
+  flex: 1;
+  min-width: 0;
+}
+
+[data-platforms] article h3 {
+  font-size: 13px;
+  font-weight: normal;
+  color: var(--white);
+}
+
+[data-platforms] article p {
+  font-size: 11px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-platforms] [data-indicator] {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--muted);
+  transition: background 0.3s;
+}
+
+[data-platforms] [data-indicator="connected"] {
+  background: var(--accent);
+  box-shadow: 0 0 8px rgba(var(--glow), 0.5);
+}
+
+[data-platforms] [data-indicator="connecting"] {
+  background: var(--amber);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+[data-platforms] [data-indicator="error"] {
+  background: var(--danger);
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+[data-platforms] article[data-coming-soon] {
+  opacity: 0.3;
+  cursor: default;
+}
+
+[data-platforms] article[data-coming-soon]:hover {
+  background: var(--bg);
+  border-color: var(--bg-raised);
+}
+
+dialog {
+  background: var(--bg);
+  border: 1px solid var(--bg-raised);
+  border-radius: var(--radius-lg);
+  color: var(--white);
+  font-family: inherit;
+  font-size: 13px;
+  padding: 1.5rem;
+  max-width: 28rem;
+  width: calc(100vw - 2rem);
+  margin: auto;
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.5);
+}
+
+dialog::backdrop {
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+[data-theme="light"] dialog {
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.15);
+  border-color: var(--bg-raised);
+}
+
+dialog h2 {
+  font-size: 14px;
+  font-weight: normal;
+  color: var(--accent);
+  margin-bottom: 1.25rem;
+}
+
+dialog label {
+  display: block;
+  margin-bottom: 0.75rem;
+}
+
+dialog label span {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+
+dialog input[type="text"],
+dialog input[type="password"],
+dialog textarea {
+  width: 100%;
+  background: var(--black);
+  border: 1px solid var(--bg-raised);
+  border-radius: var(--radius);
+  color: var(--white);
+  font-family: inherit;
+  font-size: 13px;
+  padding: 0.55rem 0.75rem;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+dialog input[type="text"]:focus,
+dialog input[type="password"]:focus,
+dialog textarea:focus {
+  border-color: rgba(var(--glow), 0.35);
+}
+
+dialog input::placeholder,
+dialog textarea::placeholder {
+  color: var(--muted);
+}
+
+dialog label[data-toggle] {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  margin-bottom: 0.75rem;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid var(--bg-raised);
+  border-radius: var(--radius);
+  transition: border-color 0.2s;
+}
+
+dialog label[data-toggle]:has(+ [data-hint]) {
+  margin-bottom: 0;
+}
+
+dialog label[data-toggle]:hover {
+  border-color: var(--muted);
+}
+
+dialog label[data-toggle]:has(input:checked) {
+  border-color: rgba(var(--glow), 0.25);
+  background: rgba(var(--glow), 0.03);
+}
+
+dialog label[data-toggle] span {
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 0;
+  transition: color 0.2s;
+}
+
+dialog label[data-toggle]:has(input:checked) span {
+  color: var(--accent);
+}
+
+dialog label[data-toggle] input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+dialog label[data-toggle] i {
+  position: relative;
+  width: 32px;
+  height: 18px;
+  background: var(--bg-raised);
+  border: 1px solid var(--muted);
+  border-radius: 9px;
+  flex-shrink: 0;
+  transition: background 0.2s, border-color 0.2s, box-shadow 0.2s;
+}
+
+dialog label[data-toggle] i::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+  background: var(--muted);
+  border-radius: 50%;
+  transition: transform 0.2s, background 0.2s;
+}
+
+dialog label[data-toggle]:has(input:checked) i {
+  background: rgba(var(--glow), 0.15);
+  border-color: rgba(var(--glow), 0.4);
+  box-shadow: 0 0 8px rgba(var(--glow), 0.15);
+}
+
+dialog label[data-toggle]:has(input:checked) i::after {
+  transform: translateX(14px);
+  background: var(--accent);
+  box-shadow: 0 0 6px rgba(var(--glow), 0.5);
+}
+
+dialog [data-hint] {
+  font-size: 10px;
+  color: var(--muted);
+  margin-top: 0.35rem;
+  margin-bottom: 0.75rem;
+  opacity: 0.7;
+}
+
+dialog footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 1.25rem;
+}
+
+dialog footer[hidden] {
+  display: none;
+}
+
+dialog footer button {
+  font-family: inherit;
+  font-size: 12px;
+  padding: 0.45rem 1rem;
+  border-radius: var(--radius);
+  cursor: pointer;
+  border: none;
+  transition: opacity 0.2s, transform 0.1s;
+}
+
+dialog footer button:active {
+  transform: scale(0.97);
+}
+
+dialog footer button[type="submit"] {
+  background: var(--accent);
+  color: var(--black);
+}
+
+dialog footer button[data-action="confirm-delete"] {
+  background: var(--danger);
+  color: var(--black);
+}
+
+dialog[aria-label="confirm delete"] p {
+  color: var(--muted);
+  font-size: 12px;
+  margin-bottom: 0.25rem;
+}
+
+dialog footer button[data-action="cancel-dialog"] {
+  background: var(--bg-raised);
+  color: var(--muted);
+  border: 1px solid rgba(80, 80, 80, 0.4);
+}
+
+dialog footer button:hover {
+  opacity: 0.85;
+}
+
+dialog[aria-label="connection"] > header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+
+dialog[aria-label="connection"] > header svg {
+  width: 22px;
+  height: 22px;
+  color: var(--accent);
+}
+
+dialog[aria-label="connection"] > header h2 {
+  margin-bottom: 0;
+}
+
+dialog[aria-label="connection"] > header p {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 1px;
+}
+
+dialog[aria-label="connection"] > header [data-indicator] {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-left: auto;
+  background: var(--muted);
+}
+
+dialog[aria-label="connection"] > header [data-indicator="connected"] {
+  background: var(--accent);
+  box-shadow: 0 0 8px rgba(var(--glow), 0.5);
+}
+
+dialog[aria-label="connection"] > header [data-indicator="connecting"] {
+  background: var(--amber);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+dialog[aria-label="connection"] > header [data-indicator="error"] {
+  background: var(--danger);
+}
+
+dialog[aria-label="connection"] [data-qr] {
+  display: block;
+  margin: 1rem auto;
+  border-radius: var(--radius);
+}
+
+dialog[aria-label="connection"] [data-detail] {
+  font-size: 12px;
+  color: var(--bright);
+  margin-bottom: 1rem;
+  padding: 0.5rem 0.75rem;
+  background: rgba(var(--glow), 0.05);
+  border-radius: var(--radius);
+  border: 1px solid rgba(var(--glow), 0.08);
+}
+
+dialog[aria-label="connection"] [data-detail="error"] {
+  color: var(--danger);
+  background: rgba(239, 68, 68, 0.06);
+  border-color: rgba(239, 68, 68, 0.15);
+  word-break: break-word;
+}
+
+dialog[aria-label="connection"] [data-setup] {
+  list-style: none;
+  counter-reset: step;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin-bottom: 1.25rem;
+}
+
+dialog[aria-label="connection"] [data-setup] li {
+  counter-increment: step;
+  font-size: 12px;
+  color: var(--muted);
+  padding-left: 2em;
+  position: relative;
+  line-height: 1.5;
+}
+
+dialog[aria-label="connection"] [data-setup] li::before {
+  content: counter(step);
+  position: absolute;
+  left: 0;
+  color: var(--accent);
+  font-size: 10px;
+  width: 1.4em;
+  height: 1.4em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(var(--glow), 0.25);
+  border-radius: 50%;
+  top: 1px;
+}
+
+dialog[aria-label="connection"] [data-setup] a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+dialog[aria-label="connection"] [data-setup] a:hover {
+  text-decoration: underline;
+}
+
+dialog[aria-label="connection"] [data-setup] code {
+  background: var(--bg-raised);
+  padding: 1px 5px;
+  border-radius: 4px;
+  color: var(--accent);
+  font-family: inherit;
+  font-size: 11px;
+}
+
+dialog[aria-label="connection"] form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+
+dialog[aria-label="connection"] [data-usage] {
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 1rem;
+}
+
+dialog[aria-label="connection"] [data-usage] code {
+  background: var(--bg-raised);
+  padding: 1px 5px;
+  border-radius: 4px;
+  color: var(--accent);
+  font-family: inherit;
+  font-size: 11px;
+}
+
+dialog[aria-label="connection"] [data-invite] {
+  background: var(--bg-raised);
+  border-radius: var(--radius);
+  padding: 0.5rem 0.75rem;
+  font-family: inherit;
+  font-size: 11px;
+  color: var(--accent);
+  user-select: all;
+  word-break: break-all;
+  white-space: pre-wrap;
+  margin-bottom: 1rem;
+}
+
+dialog[aria-label="connection"] [data-invite-label] {
+  font-size: 10px;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+
+dialog[aria-label="connection"] footer button[data-connect] {
+  background: var(--accent);
+  color: var(--black);
+}
+
+dialog[aria-label="connection"] footer button[data-disconnect] {
+  background: transparent;
+  color: var(--danger);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+}
+
+dialog[aria-label="connection"] footer button[data-disconnect]:hover {
+  border-color: var(--danger);
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--bg-raised);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--muted);
+}
+
+@media (max-width: 600px) {
+  body {
+    grid-template-columns: 1fr;
+  }
+
+  button[data-action="toggle-nav"] {
+    display: flex;
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 200;
+    height: var(--header-h);
+    width: 3.5rem;
+    background: none;
+    border: none;
+    color: var(--white);
+    cursor: pointer;
+    align-items: center;
+    justify-content: center;
+  }
+
+  button[data-action="toggle-nav"] svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  [data-overlay] {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    z-index: 299;
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+  }
+
+  [data-overlay]:not([hidden]) {
+    display: block;
+  }
+
+  nav[aria-label="agents"] {
+    position: fixed;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 16rem;
+    z-index: 300;
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+    border-right: 1px solid var(--bg-raised);
+  }
+
+  nav[aria-label="agents"][data-open] {
+    transform: translateX(0);
+  }
+
+  section[aria-label="chat"] > header {
+    padding-left: 3.5rem;
+    padding-right: 0.75rem;
+    min-height: var(--header-h);
+  }
+
+  section[aria-label="chat"] > header > div {
+    text-align: center;
+    flex: 1;
+  }
+
+  section[aria-label="connections"] > header {
+    padding-left: 3.5rem;
+    text-align: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: var(--header-h);
+  }
+
+  section[aria-label="setup"],
+  section[aria-label="empty"] {
+    padding: 1rem;
+  }
+
+  div[aria-label="messages"] {
+    padding: 1rem;
+  }
+
+  div[aria-label="messages"] > div[data-role="user"] {
+    max-width: 88%;
+  }
+
+  div[aria-label="messages"] > div[data-role="assistant"] {
+    max-width: 95%;
+  }
+
+  form[aria-label="input"] {
+    padding: 0.5rem 0.75rem 0.75rem;
+  }
+
+  section[aria-label="connections"] [data-platforms] {
+    padding: 1rem;
+    grid-template-columns: 1fr;
+  }
+}
+
+div[aria-label="messages"] > div[data-role="heartbeat"] {
+  align-self: flex-start;
+  max-width: 85%;
+}
+
+div[aria-label="messages"] > div[data-role="heartbeat"] > .msg-body {
+  color: var(--white);
+  font-size: 12px;
+  word-wrap: break-word;
+  line-height: 1.5;
+  opacity: 0.7;
+  padding: 0.4rem 0.7rem;
+  background: rgba(var(--glow), 0.04);
+  border: 1px solid rgba(var(--glow), 0.08);
+  border-radius: var(--radius);
+}
+
+div[aria-label="messages"] > div[data-role="heartbeat"] > .msg-body::before {
+  content: 'heartbeat: ';
+  color: var(--accent);
+  font-size: 10px;
+}
+
+div[aria-label="messages"] > div[data-role="heartbeat"] > .msg-body ul {
+  list-style: none;
+  padding-left: 1em;
+}
+
+div[aria-label="messages"] > div[data-role="heartbeat"] > .msg-body li {
+  position: relative;
+  padding-left: 0.5em;
+}
+
+div[aria-label="messages"] > div[data-role="heartbeat"] > .msg-body li::before {
+  content: '·';
+  position: absolute;
+  left: -0.5em;
+  color: var(--muted);
+}
+
+div[aria-label="messages"] > div[data-role="heartbeat"] > .msg-body p {
+  margin-bottom: 0.3em;
+}
+
+div[aria-label="messages"] > div[data-role="heartbeat"] > .msg-body p:last-child {
+  margin-bottom: 0;
+}
+
+dialog label[data-select] {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid var(--bg-raised);
+  border-radius: var(--radius);
+}
+
+dialog label[data-select] span {
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 0;
+}
+
+dialog label[data-select] select {
+  background: var(--black);
+  border: 1px solid var(--bg-raised);
+  border-radius: 4px;
+  color: var(--white);
+  font-family: inherit;
+  font-size: 12px;
+  padding: 3px 6px;
+  outline: none;
+}
+
+dialog[aria-label="agent records"] {
+  max-width: 32rem;
+}
+
+dialog[aria-label="agent records"] [data-file-list] {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.5rem;
+}
+
+dialog[aria-label="agent records"] [data-file-list][hidden] {
+  display: none;
+}
+
+dialog[aria-label="agent records"] [data-file-list] button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  background: none;
+  border: 1px solid var(--bg-raised);
+  border-radius: var(--radius);
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 11px;
+  padding: 1rem 0.5rem;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s, color 0.2s;
+}
+
+dialog[aria-label="agent records"] [data-file-list] button:hover {
+  background: var(--bg-raised);
+  border-color: var(--muted);
+  color: var(--white);
+}
+
+dialog[aria-label="agent records"] [data-file-list] button:hover svg {
+  color: var(--accent);
+}
+
+dialog[aria-label="agent records"] [data-file-list] button svg {
+  width: 18px;
+  height: 18px;
+  color: var(--muted);
+  transition: color 0.2s;
+}
+
+dialog[aria-label="agent records"] [data-file-editor] header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+dialog[aria-label="agent records"] [data-file-editor] header button {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  cursor: pointer;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 12px;
+  transition: color 0.2s, border-color 0.2s;
+}
+
+dialog[aria-label="agent records"] [data-file-editor] header button:hover {
+  color: var(--white);
+  border-color: var(--muted);
+}
+
+dialog[aria-label="agent records"] [data-file-editor] [data-file-name] {
+  font-size: 12px;
+  color: var(--accent);
+}
+
+dialog[aria-label="agent records"] [data-file-editor] textarea {
+  width: 100%;
+  background: var(--black);
+  border: 1px solid var(--bg-raised);
+  border-radius: var(--radius);
+  color: var(--white);
+  font-family: inherit;
+  font-size: 12px;
+  padding: 0.6rem 0.75rem;
+  outline: none;
+  resize: vertical;
+  line-height: 1.5;
+  transition: border-color 0.2s;
+}
+
+dialog[aria-label="agent records"] [data-file-editor] textarea:focus {
+  border-color: rgba(var(--glow), 0.35);
+}
+
+dialog[aria-label="agent records"] [data-file-list]:empty::after {
+  content: 'no records yet';
+  color: var(--muted);
+  font-size: 12px;
+  padding: 0.5rem 0;
+}
+
+dialog[aria-label="agent records"] [data-log-list] {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 20rem;
+  overflow-y: auto;
+}
+
+dialog[aria-label="agent records"] [data-log-list] button {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  background: none;
+  border: 1px solid var(--bg-raised);
+  border-radius: var(--radius);
+  color: var(--white);
+  font-family: inherit;
+  font-size: 12px;
+  padding: 0.5rem 0.75rem;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+dialog[aria-label="agent records"] [data-log-list] button:hover {
+  background: var(--bg-raised);
+  border-color: var(--muted);
+}
+
+dialog[aria-label="agent records"] [data-log-list] button svg {
+  width: 12px;
+  height: 12px;
+  color: var(--muted);
+  flex-shrink: 0;
+}
