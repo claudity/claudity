@@ -326,7 +326,12 @@ step "setting up auto-start"
 PLIST_NAME="ai.claudity.server"
 PLIST_PATH="$HOME/Library/LaunchAgents/${PLIST_NAME}.plist"
 NODE_PATH="$(which node)"
+CLAUDE_PATH="$(which claude 2>/dev/null || echo "")"
 mkdir -p "$INSTALL_DIR/data"
+
+PLIST_PATH_DIRS="/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin"
+[ -n "$NODE_PATH" ] && PLIST_PATH_DIRS="$(dirname "$NODE_PATH"):${PLIST_PATH_DIRS}"
+[ -n "$CLAUDE_PATH" ] && PLIST_PATH_DIRS="$(dirname "$CLAUDE_PATH"):${PLIST_PATH_DIRS}"
 
 launchctl bootout "gui/$(id -u)/${PLIST_NAME}" 2>/dev/null || true
 
@@ -355,7 +360,7 @@ cat > "$PLIST_PATH" <<PLIST
   <key>EnvironmentVariables</key>
   <dict>
     <key>PATH</key>
-    <string>/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin</string>
+    <string>${PLIST_PATH_DIRS}</string>
   </dict>
 </dict>
 </plist>
