@@ -19,7 +19,7 @@ function log(msg) {
 function onStatus(platform) {
   return (status, detail) => {
     stmts.updateConnectionStatus.run(status, detail || null, platform);
-    log(`${platform}: ${status}${detail ? ' — ' + detail : ''}`);
+    log(`${platform}: ${status}${detail ? ' - ' + detail : ''}`);
   };
 }
 

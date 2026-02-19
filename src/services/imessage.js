@@ -113,7 +113,7 @@ end tell`;
 function deleteResponseEcho(afterRowId, text) {
   try {
     const echo = db.prepare(
-      "select m.ROWID from message m where m.is_from_me = 0 and m.ROWID > ? and m.text = ?"
+      "select m.ROWID from message m where m.is_from_me = 1 and m.ROWID > ? and m.text = ?"
     ).get(afterRowId, text);
 
     if (echo) {
@@ -134,7 +134,8 @@ function poll() {
     }
 
     if (!msg.text) continue;
-    if (recentSent.has(msg.text)) continue;
+    const msgText = msg.text.length > MAX_RESPONSE_LENGTH ? msg.text.slice(0, MAX_RESPONSE_LENGTH) + '...' : msg.text;
+    if (recentSent.has(msg.text) || recentSent.has(msgText)) continue;
 
     const { stmts } = require('../db');
     let parsed = parseMessage(msg.text);

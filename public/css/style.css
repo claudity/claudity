@@ -1,7 +1,7 @@
 @font-face {
   font-family: 'berkeley';
   src: url('../font/berkeley.woff2') format('woff2');
-  font-weight: normal;
+  font-weight: 100 900;
   font-style: normal;
   font-display: swap;
 }
@@ -67,7 +67,6 @@ html, body {
 
 body {
   font-family: 'berkeley', monospace;
-  -webkit-text-stroke: 0px;
   background: var(--black);
   color: var(--white);
   display: grid;
@@ -114,7 +113,7 @@ nav[aria-label="agents"] header {
 
 nav[aria-label="agents"] header h1 {
   font-size: 14px;
-  -webkit-text-stroke: 0.5px currentColor;
+  font-weight: 600;
   color: var(--accent);
   letter-spacing: 0.05em;
   display: flex;
@@ -124,7 +123,7 @@ nav[aria-label="agents"] header h1 {
 
 nav[aria-label="agents"] header h1 span {
   font-size: 9px;
-  -webkit-text-stroke: 0;
+  font-weight: normal;
   color: var(--accent);
   letter-spacing: 0.06em;
   background: rgba(var(--glow), 0.1);
@@ -364,6 +363,16 @@ section[aria-label="setup"] p {
 section[aria-label="empty"] p {
   color: var(--muted);
   font-size: 12px;
+}
+
+section[aria-label="empty"] a {
+  color: var(--accent);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+section[aria-label="empty"] a:hover {
+  text-decoration: underline;
 }
 
 section[aria-label="setup"] pre {
@@ -611,7 +620,7 @@ div[aria-label="messages"] > div[data-role="assistant"] > .msg-body p:last-child
 }
 
 div[aria-label="messages"] > div[data-role="assistant"] > .msg-body strong {
-  -webkit-text-stroke: 0.4px currentColor;
+  font-weight: 600;
 }
 
 div[aria-label="messages"] > div[data-role="assistant"] > .msg-body strong a {
@@ -744,10 +753,48 @@ div[aria-label="messages"] > div[data-activity] [data-thinking] {
   opacity: 0.85;
 }
 
+div[aria-label="messages"] > div[data-activity] [data-activity-row] {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
 div[aria-label="messages"] > div[data-activity] [data-status] {
   color: var(--muted);
   font-size: 11px;
+}
+
+div[aria-label="messages"] > div[data-activity] [data-summary] {
+  color: var(--accent);
+  font-size: 11px;
   margin-top: 4px;
+  opacity: 0.7;
+}
+
+div[aria-label="messages"] > div[data-activity] [data-stop] {
+  background: transparent;
+  border: 1px solid var(--bg-hover);
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 10px;
+  padding: 2px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+div[aria-label="messages"] > div[data-activity] [data-stop]:hover {
+  background: rgba(255, 80, 80, 0.1);
+  border-color: rgba(255, 80, 80, 0.3);
+  color: var(--danger);
+}
+
+div[aria-label="messages"] > div[data-role="system"] {
+  color: var(--muted);
+  font-size: 11px;
+  padding: 0.25rem 0;
+  font-style: italic;
 }
 
 form[aria-label="input"] {
@@ -869,19 +916,19 @@ section[aria-label="connections"] [data-platforms] {
   border-color: var(--muted);
 }
 
-[data-platforms] article[data-status="connected"] {
+[data-platforms] article[data-conn-status="connected"] {
   border-color: rgba(var(--glow), 0.2);
 }
 
-[data-platforms] article[data-status="connected"]:hover {
+[data-platforms] article[data-conn-status="connected"]:hover {
   border-color: rgba(var(--glow), 0.4);
 }
 
-[data-platforms] article[data-status="connecting"] {
+[data-platforms] article[data-conn-status="connecting"] {
   border-color: rgba(245, 158, 11, 0.3);
 }
 
-[data-platforms] article[data-status="error"] {
+[data-platforms] article[data-conn-status="error"] {
   border-color: rgba(239, 68, 68, 0.3);
 }
 

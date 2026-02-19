@@ -13,6 +13,11 @@ const connections = require('./services/connections');
 const memory = require('./services/memory');
 const heartbeat = require('./services/heartbeat');
 
+process.on('unhandledRejection', (err) => {
+  if (err && err.message === 'aborted') return;
+  console.error('[unhandled rejection]', err);
+});
+
 const app = express();
 const PORT = process.env.PORT || 6767;
 
@@ -51,7 +56,7 @@ function migrateImessageFromEnv() {
 
 autoUpdate();
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`claudity running on http://localhost:${PORT}`);
   scheduler.start();
   memory.startConsolidation();
@@ -59,3 +64,14 @@ app.listen(PORT, () => {
   connections.start();
   heartbeat.start();
 });
+
+async function shutdown() {
+  console.log('shutting down...');
+  heartbeat.stop();
+  await connections.stop();
+  server.close();
+  process.exit(0);
+}
+
+process.on('SIGTERM', shutdown);
+process.on('SIGINT', shutdown);

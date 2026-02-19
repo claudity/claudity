@@ -14,7 +14,7 @@ const registry = {
           method: { type: 'string', enum: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'], description: 'http method' },
           url: { type: 'string', description: 'full url including https://' },
           headers: { type: 'object', description: 'request headers as key-value pairs' },
-          body: { description: 'request body — object will be sent as json, string sent as-is' }
+          body: { description: 'request body - object will be sent as json, string sent as-is' }
         },
         required: ['method', 'url']
       }
@@ -85,7 +85,7 @@ const registry = {
       input_schema: {
         type: 'object',
         properties: {
-          description: { type: 'string', description: 'what to do each time this fires (be specific — this is the prompt you will receive)' },
+          description: { type: 'string', description: 'what to do each time this fires (be specific - this is the prompt you will receive)' },
           interval_minutes: { type: 'number', description: 'how often to run in minutes (minimum 1)' }
         },
         required: ['description', 'interval_minutes']
@@ -136,7 +136,7 @@ const registry = {
   delegate: {
     definition: {
       name: 'delegate',
-      description: 'send a message to another claudity agent by name and get their response. use this for cross-agent collaboration — asking another agent to handle something in their domain.',
+      description: 'send a message to another claudity agent by name and get their response. use this for cross-agent collaboration - asking another agent to handle something in their domain.',
       input_schema: {
         type: 'object',
         properties: {
@@ -214,7 +214,7 @@ async function httpRequest(input) {
   } else {
     responseBody = await res.text();
     if (responseBody.length > 50000) {
-      responseBody = responseBody.slice(0, 50000) + '\n\n[truncated — response exceeded 50000 chars]';
+      responseBody = responseBody.slice(0, 50000) + '\n\n[truncated - response exceeded 50000 chars]';
     }
   }
 
@@ -251,7 +251,7 @@ async function readUrl(input) {
   }
 
   if (text.length > 80000) {
-    text = text.slice(0, 80000) + '\n\n[truncated — content exceeded 80000 chars]';
+    text = text.slice(0, 80000) + '\n\n[truncated - content exceeded 80000 chars]';
   }
 
   return { url, content: text };
@@ -355,17 +355,8 @@ async function spawnSubagent(input, context) {
     let done = false;
     const args = ['-p', '--output-format', 'json', '--model', model, '--dangerously-skip-permissions'];
     const proc = spawn('claude', args, {
-      stdio: ['pipe', 'pipe', 'pipe'],
-      timeout: 300000
+      stdio: ['pipe', 'pipe', 'pipe']
     });
-
-    const fallback = setTimeout(() => {
-      if (!done) {
-        done = true;
-        proc.kill();
-        resolve({ error: 'subagent timed out after 5 minutes' });
-      }
-    }, 310000);
 
     let stdout = '';
     let stderr = '';
@@ -376,7 +367,6 @@ async function spawnSubagent(input, context) {
     proc.on('close', code => {
       if (done) return;
       done = true;
-      clearTimeout(fallback);
       if (!stdout.trim() && code !== 0) {
         resolve({ error: `subagent exited ${code}: ${stderr.trim()}` });
         return;
@@ -393,7 +383,6 @@ async function spawnSubagent(input, context) {
     proc.on('error', err => {
       if (done) return;
       done = true;
-      clearTimeout(fallback);
       resolve({ error: err.message });
     });
 
@@ -440,7 +429,7 @@ async function completeBootstrap(input, context) {
   workspace.deleteFile(agent.name, 'BOOTSTRAP.md');
   const chat = require('./chat');
   chat.emit(context.agentId, 'bootstrap_complete', {});
-  return { bootstrapped: true };
+  return { bootstrapped: true, note: 'setup complete. respond naturally to the user - do not greet them again or say welcome back.' };
 }
 
 function getToolDefinitions(toolNames) {

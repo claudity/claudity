@@ -86,7 +86,7 @@ try {
 } catch {}
 
 try {
-  db.exec("alter table agents add column thinking text not null default 'high'");
+  db.exec("alter table agents add column effort text not null default 'high'");
 } catch {}
 
 try {
@@ -151,7 +151,7 @@ const stmts = {
   setBootstrapped: db.prepare('update agents set bootstrapped = ?, updated_at = current_timestamp where id = ?'),
   setHeartbeatInterval: db.prepare('update agents set heartbeat_interval = ?, updated_at = current_timestamp where id = ?'),
   setModel: db.prepare('update agents set model = ?, updated_at = current_timestamp where id = ?'),
-  setThinking: db.prepare('update agents set thinking = ?, updated_at = current_timestamp where id = ?'),
+  setEffort: db.prepare('update agents set effort = ?, updated_at = current_timestamp where id = ?'),
   setShowHeartbeat: db.prepare('update agents set show_heartbeat = ?, updated_at = current_timestamp where id = ?'),
 
   getSession: db.prepare('select * from sessions where agent_id = ?'),

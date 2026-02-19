@@ -15,7 +15,7 @@ router.get('/auth/status', (req, res) => {
 router.post('/auth/api-key', (req, res) => {
   const { key } = req.body;
   if (!key) return res.status(400).json({ error: 'key required' });
-  if (!key.startsWith('sk-ant-api')) return res.status(400).json({ error: 'invalid api key — must start with sk-ant-api. setup tokens and oauth tokens are not supported here. run claude setup-token instead.' });
+  if (!key.startsWith('sk-ant-api')) return res.status(400).json({ error: 'invalid api key - must start with sk-ant-api. setup tokens and oauth tokens are not supported here. run claude setup-token instead.' });
   auth.setApiKey(key);
   res.json({ saved: true });
 });
@@ -23,12 +23,12 @@ router.post('/auth/api-key', (req, res) => {
 router.post('/auth/setup-token', (req, res) => {
   const { token } = req.body;
   if (!token) return res.status(400).json({ error: 'token required' });
-  if (!token.startsWith('sk-ant-oat')) return res.status(400).json({ error: 'invalid setup token — must start with sk-ant-oat. if you have an api key, use the api key option instead.' });
+  if (!token.startsWith('sk-ant-oat')) return res.status(400).json({ error: 'invalid setup token - must start with sk-ant-oat. if you have an api key, use the api key option instead.' });
   try {
     auth.writeSetupToken(token);
     const status = auth.getAuthStatus();
     if (status.authenticated) return res.json({ saved: true });
-    return res.status(400).json({ error: 'token saved to keychain but authentication failed — token may be invalid or expired' });
+    return res.status(400).json({ error: 'token saved to keychain but authentication failed - token may be invalid or expired' });
   } catch (err) {
     return res.status(500).json({ error: 'failed to write to keychain: ' + err.message });
   }
@@ -44,14 +44,14 @@ router.get('/agents', (req, res) => {
 });
 
 router.post('/agents', (req, res) => {
-  const { name, is_default, model, thinking } = req.body;
+  const { name, is_default, model, effort } = req.body;
   if (!name) return res.status(400).json({ error: 'name required' });
   const id = uuid();
   try {
     stmts.createAgent.run(id, name);
     stmts.setBootstrapped.run(0, id);
     if (model) stmts.setModel.run(model, id);
-    if (thinking) stmts.setThinking.run(thinking, id);
+    if (effort) stmts.setEffort.run(effort, id);
     if (is_default) {
       stmts.clearDefaultAgent.run();
       stmts.setDefaultAgent.run(id);
@@ -89,7 +89,7 @@ router.patch('/agents/:id', (req, res) => {
     heartbeat.updateInterval(req.params.id, req.body.heartbeat_interval);
   }
   if (req.body.model) stmts.setModel.run(req.body.model, req.params.id);
-  if (req.body.thinking) stmts.setThinking.run(req.body.thinking, req.params.id);
+  if (req.body.effort) stmts.setEffort.run(req.body.effort, req.params.id);
   if ('show_heartbeat' in req.body) stmts.setShowHeartbeat.run(req.body.show_heartbeat ? 1 : 0, req.params.id);
   res.json(stmts.getAgent.get(req.params.id));
 });
@@ -121,6 +121,11 @@ router.delete('/agents/:id/messages', (req, res) => {
   res.json({ cleared: true });
 });
 
+router.post('/agents/:id/stop', (req, res) => {
+  const stopped = chat.stopAgent(req.params.id);
+  res.json({ stopped });
+});
+
 router.post('/agents/:id/chat', (req, res) => {
   const agent = stmts.getAgent.get(req.params.id);
   if (!agent) return res.status(404).json({ error: 'agent not found' });
@@ -147,7 +152,18 @@ router.get('/agents/:id/stream', (req, res) => {
   res.write(`event: connected\ndata: ${JSON.stringify({ agent_id: req.params.id })}\n\n`);
 
   if (chat.isProcessing(req.params.id)) {
-    res.write(`event: typing\ndata: ${JSON.stringify({ active: true })}\n\n`);
+    const activity = chat.getActivity(req.params.id);
+    const elapsed = activity ? Math.floor((Date.now() - activity.startTime) / 1000) : 0;
+    res.write(`event: typing\ndata: ${JSON.stringify({ active: true, elapsed })}\n\n`);
+    if (activity) {
+      if (activity.tool) {
+        const toolElapsed = activity.toolStartTime ? Math.floor((Date.now() - activity.toolStartTime) / 1000) : 0;
+        res.write(`event: tool_call\ndata: ${JSON.stringify({ name: activity.tool, elapsed, toolElapsed })}\n\n`);
+      }
+      if (activity.summary) {
+        res.write(`event: status_update\ndata: ${JSON.stringify({ summary: activity.summary, elapsed, tool: activity.tool || 'thinking' })}\n\n`);
+      }
+    }
   }
 
   chat.addStream(req.params.id, res);

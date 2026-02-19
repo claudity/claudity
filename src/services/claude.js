@@ -8,6 +8,7 @@ const { stmts } = require('../db');
 
 const API_URL = 'https://api.anthropic.com/v1/messages';
 const MODEL = 'claude-opus-4-6';
+const activeProcesses = new Map();
 
 function hashPrompt(str) {
   let h = 0;
@@ -17,24 +18,20 @@ function hashPrompt(str) {
   return h.toString(36);
 }
 
-function invalidateSession(agentId) {
-  stmts.deleteSession.run(agentId);
-}
-
 function isContextOverflow(err) {
   const msg = (err.message || '').toLowerCase();
   return msg.includes('context') || msg.includes('overflow') || msg.includes('too long') || msg.includes('token limit');
 }
 
-async function sendMessage({ system, messages, tools, maxTokens = 4096, agentId, model = 'opus', thinking = 'high', noBuiltinTools = false }) {
+async function sendMessage({ system, messages, tools, maxTokens = 4096, agentId, model = 'opus', effort = 'high', noBuiltinTools = false, onEvent = null }) {
   const status = auth.getAuthStatus();
-  if (!status.authenticated) throw new Error('not authenticated — run claude setup-token');
+  if (!status.authenticated) throw new Error('not authenticated - run claude setup-token');
 
   if (status.mode === 'api_key') {
     return sendViaApi({ system, messages, tools, maxTokens });
   }
 
-  return sendViaCli({ system, messages, tools, maxTokens, agentId, model, thinking, noBuiltinTools });
+  return sendViaCli({ system, messages, tools, maxTokens, agentId, model, effort, noBuiltinTools, onEvent });
 }
 
 async function sendViaApi({ system, messages, tools, maxTokens }) {
@@ -110,40 +107,62 @@ function buildContext(messages) {
   }).filter(Boolean).join('\n\n');
 }
 
-function runCli(args, input, timeoutMs = 300000, extraEnv = {}) {
+function runCli(args, input, extraEnv = {}, agentId = null, onEvent = null) {
   return new Promise((resolve, reject) => {
     let done = false;
     const env = { ...process.env, ...extraEnv };
+    delete env.CLAUDECODE;
     const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'claudity-'));
     const proc = spawn('claude', args, {
       stdio: ['pipe', 'pipe', 'pipe'],
-      timeout: timeoutMs,
       cwd,
       env
     });
 
-    const fallback = setTimeout(() => {
-      if (!done) {
-        done = true;
-        proc.kill();
-        reject(new Error('claude cli timed out'));
-      }
-    }, timeoutMs + 10000);
+    if (agentId) activeProcesses.set(agentId, proc);
 
     let stdout = '';
     let stderr = '';
+    let lastResult = null;
+    let buffer = '';
 
-    proc.stdout.on('data', d => stdout += d);
+    proc.stdout.on('data', d => {
+      const chunk = d.toString();
+      stdout += chunk;
+      if (onEvent) {
+        buffer += chunk;
+        const lines = buffer.split('\n');
+        buffer = lines.pop();
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          try {
+            const event = JSON.parse(line);
+            if (event.type === 'result') lastResult = line;
+            onEvent(event);
+          } catch {}
+        }
+      }
+    });
     proc.stderr.on('data', d => stderr += d);
 
     proc.on('close', code => {
       if (done) return;
       done = true;
-      clearTimeout(fallback);
-      if (stdout.trim()) {
+      if (agentId) activeProcesses.delete(agentId);
+      if (onEvent && lastResult) {
+        resolve(lastResult);
+      } else if (onEvent && !lastResult) {
+        if (code === null) {
+          reject(new Error('aborted'));
+        } else {
+          reject(new Error(`claude cli exited with code ${code}${stderr.trim() ? ': ' + stderr.trim() : ''}`));
+        }
+      } else if (stdout.trim()) {
         resolve(stdout.trim());
-      } else if (code !== 0) {
-        reject(new Error(`claude cli exited ${code}: ${stderr.trim()}`));
+      } else if (code !== 0 && code !== null) {
+        reject(new Error(`claude cli exited with code ${code}${stderr.trim() ? ': ' + stderr.trim() : ''}`));
+      } else if (code === null) {
+        reject(new Error('claude cli process was terminated unexpectedly - try again'));
       } else {
         resolve('');
       }
@@ -152,7 +171,6 @@ function runCli(args, input, timeoutMs = 300000, extraEnv = {}) {
     proc.on('error', err => {
       if (done) return;
       done = true;
-      clearTimeout(fallback);
       reject(err);
     });
 
@@ -161,13 +179,11 @@ function runCli(args, input, timeoutMs = 300000, extraEnv = {}) {
   });
 }
 
-async function sendViaCli({ system, messages, tools, maxTokens, agentId, model = 'opus', thinking = 'high', noBuiltinTools = false }) {
+async function sendViaCli({ system, messages, tools, maxTokens, agentId, model = 'opus', effort = 'high', noBuiltinTools = false, onEvent = null }) {
   const lastUserMsg = messages.filter(m => m.role === 'user').pop();
   const promptText = buildPromptText(lastUserMsg);
   const sysPrompt = buildFullSysPrompt(system, tools);
   const currentHash = hashPrompt(sysPrompt);
-  const thinkingTokens = { low: '0', medium: '16000', high: '31999' };
-  const extraEnv = { MAX_THINKING_TOKENS: thinkingTokens[thinking] || '31999' };
 
   const session = agentId ? stmts.getSession.get(agentId) : null;
   const canResume = session && session.prompt_hash === currentHash;
@@ -175,24 +191,24 @@ async function sendViaCli({ system, messages, tools, maxTokens, agentId, model =
   let output;
 
   if (canResume) {
-    const args = ['-p', '--output-format', 'json', '--dangerously-skip-permissions', '--setting-sources', '', '--resume', session.session_id];
+    const args = ['-p', '--output-format', 'stream-json', '--verbose', '--effort', effort, '--dangerously-skip-permissions', '--setting-sources', '', '--resume', session.session_id];
     try {
-      output = await runCli(args, promptText, 300000, extraEnv);
+      output = await runCli(args, promptText, {}, agentId, onEvent);
+      return processCliOutput(output, tools);
     } catch (err) {
+      if (err.message === 'aborted') throw err;
       stmts.deleteSession.run(agentId);
       if (isContextOverflow(err)) {
-        return sendCliFresh({ sysPrompt, messages: [messages[messages.length - 1]], promptText, tools, agentId, currentHash, model, extraEnv, noBuiltinTools });
+        return sendCliFresh({ sysPrompt, messages: [messages[messages.length - 1]], promptText, tools, agentId, currentHash, model, effort, noBuiltinTools, onEvent });
       }
-      return sendCliFresh({ sysPrompt, messages, promptText, tools, agentId, currentHash, model, extraEnv, noBuiltinTools });
+      return sendCliFresh({ sysPrompt, messages, promptText, tools, agentId, currentHash, model, effort, noBuiltinTools, onEvent });
     }
-  } else {
-    return sendCliFresh({ sysPrompt, messages, promptText, tools, agentId, currentHash, model, extraEnv, noBuiltinTools });
   }
 
-  return processCliOutput(output, tools);
+  return sendCliFresh({ sysPrompt, messages, promptText, tools, agentId, currentHash, model, effort, noBuiltinTools, onEvent });
 }
 
-async function sendCliFresh({ sysPrompt, messages, promptText, tools, agentId, currentHash, model = 'opus', extraEnv = {}, noBuiltinTools = false }) {
+async function sendCliFresh({ sysPrompt, messages, promptText, tools, agentId, currentHash, model = 'opus', effort = 'high', noBuiltinTools = false, onEvent = null }) {
   const sessionId = randomUUID();
   const context = buildContext(messages);
 
@@ -200,14 +216,14 @@ async function sendCliFresh({ sysPrompt, messages, promptText, tools, agentId, c
   if (context) fullPrompt += `previous conversation:\n${context}\n\n`;
   fullPrompt += promptText;
 
-  const args = ['-p', '--output-format', 'json', '--model', model, '--dangerously-skip-permissions', '--setting-sources', '', '--session-id', sessionId];
+  const args = ['-p', '--output-format', 'stream-json', '--verbose', '--model', model, '--effort', effort, '--dangerously-skip-permissions', '--setting-sources', '', '--session-id', sessionId];
   if (noBuiltinTools) args.push('--tools', '');
   if (sysPrompt) {
     args.push('--system-prompt', sysPrompt);
   }
 
   try {
-    const output = await runCli(args, fullPrompt, 300000, extraEnv);
+    const output = await runCli(args, fullPrompt, {}, agentId, onEvent);
 
     if (agentId) {
       stmts.upsertSession.run(agentId, sessionId, currentHash);
@@ -215,10 +231,11 @@ async function sendCliFresh({ sysPrompt, messages, promptText, tools, agentId, c
 
     return processCliOutput(output, tools);
   } catch (err) {
+    if (err.message === 'aborted') throw err;
     if (isContextOverflow(err) && context) {
-      const retryArgs = ['-p', '--output-format', 'json', '--model', model, '--dangerously-skip-permissions', '--setting-sources', '', '--session-id', randomUUID()];
+      const retryArgs = ['-p', '--output-format', 'stream-json', '--verbose', '--model', model, '--effort', effort, '--dangerously-skip-permissions', '--setting-sources', '', '--session-id', randomUUID()];
       if (sysPrompt) retryArgs.push('--system-prompt', sysPrompt);
-      const output = await runCli(retryArgs, promptText, 300000, extraEnv);
+      const output = await runCli(retryArgs, promptText, {}, agentId);
       return processCliOutput(output, tools);
     }
     throw err;
@@ -228,6 +245,10 @@ async function sendCliFresh({ sysPrompt, messages, promptText, tools, agentId, c
 function processCliOutput(output, tools) {
   const parsed = parseCliOutput(output);
   if (!parsed) throw new Error('claude cli returned empty response');
+
+  if (parsed.is_error && parsed.num_turns === 0) {
+    throw new Error('cli session error');
+  }
 
   if (parsed.is_error || parsed.subtype === 'error_max_turns') {
     const text = typeof parsed.result === 'string' && parsed.result.length > 0
@@ -339,9 +360,9 @@ function hasToolUse(response) {
 
 async function generateQuickAck(userContent, agentName) {
   const args = ['-p', '--output-format', 'json', '--model', 'haiku', '--dangerously-skip-permissions', '--setting-sources', ''];
-  const prompt = `you are ${agentName}, an ai agent. the user just sent you this message:\n\n"${userContent}"\n\nyou are about to start working on this. generate a short casual acknowledgment (1 sentence, all lowercase) that shows you read their message and are about to get on it. DO NOT answer their question or attempt the task. just acknowledge it like "sounds good, let me look into that" or "ooh nice, give me a sec to work on that" — reference what they asked about naturally but don't provide any actual content or answers. just the acknowledgment, nothing else.`;
+  const prompt = `you are ${agentName}. the user just said: "${userContent}"\n\nacknowledge their message in one casual sentence - show you understood what they want and you're about to start. don't answer or attempt the task, just the acknowledgment. no quotes.`;
   try {
-    const output = await runCli(args, prompt, 15000);
+    const output = await runCli(args, prompt);
     const parsed = parseCliOutput(output);
     if (parsed && typeof parsed.result === 'string' && parsed.result.length > 0) {
       return parsed.result.trim();
@@ -350,4 +371,28 @@ async function generateQuickAck(userContent, agentName) {
   return null;
 }
 
-module.exports = { sendMessage, extractText, extractToolUse, hasToolUse, invalidateSession, generateQuickAck };
+function abort(agentId) {
+  const proc = activeProcesses.get(agentId);
+  if (proc) {
+    proc.kill();
+    activeProcesses.delete(agentId);
+    return true;
+  }
+  return false;
+}
+
+async function generateStatus(toolName, elapsedSeconds, agentName) {
+  const mins = Math.floor(elapsedSeconds / 60);
+  const args = ['-p', '--output-format', 'json', '--model', 'haiku', '--dangerously-skip-permissions', '--setting-sources', ''];
+  const prompt = `you are ${agentName}. you've been working for ${mins} minute${mins === 1 ? '' : 's'} and you're currently using ${toolName}. give a one-sentence first-person casual status update for your user. no quotes.`;
+  try {
+    const output = await runCli(args, prompt);
+    const parsed = parseCliOutput(output);
+    if (parsed && typeof parsed.result === 'string' && parsed.result.length > 0) {
+      return parsed.result.trim().replace(/^["']|["']$/g, '');
+    }
+  } catch {}
+  return null;
+}
+
+module.exports = { sendMessage, extractText, extractToolUse, hasToolUse, generateQuickAck, generateStatus, abort };

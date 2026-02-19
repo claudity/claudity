@@ -136,7 +136,7 @@ if xcode-select -p &>/dev/null; then
   ok "already installed"
 else
   xcode-select --install 2>/dev/null || true
-  warn "a dialog may appear — click install and wait"
+  warn "a dialog may appear - click install and wait"
   elapsed=0
   timeout=1800
   chars="⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
@@ -210,7 +210,7 @@ fi
 
 step "downloading claudity"
 INSTALL_DIR="$HOME/claudity"
-REPO_URL="https://github.com/flavormingo/claudity.git"
+REPO_URL="https://github.com/claudity/claudity.git"
 if [ -d "$INSTALL_DIR/.git" ]; then
   spin "updating claudity" git -C "$INSTALL_DIR" pull --ff-only
 elif [ -d "$INSTALL_DIR" ]; then
@@ -256,7 +256,7 @@ else
     warn "no authentication found"
     echo ""
     echo -e "  ${green}1${reset}) run ${green}claude login${reset} now ${dim}(recommended)${reset}"
-    echo -e "  ${green}2${reset}) skip — configure later via web ui"
+    echo -e "  ${green}2${reset}) skip - configure later via web ui"
     echo ""
     echo -en "  choice ${dim}[1/2]${reset}: "
     read -r auth_choice </dev/tty
@@ -270,10 +270,10 @@ else
       if [ -n "$KEYCHAIN_CREDS" ]; then
         ok "authenticated successfully"
       else
-        warn "credentials not detected — you can authenticate later"
+        warn "credentials not detected - you can authenticate later"
       fi
     else
-      info "skipped — authenticate at http://localhost:6767"
+      info "skipped - authenticate at http://localhost:6767"
     fi
   fi
 fi
@@ -322,15 +322,52 @@ fi
 echo ""
 info "for signal support: ${green}brew install signal-cli${reset}"
 
-step "starting claudity..."
-cd "$INSTALL_DIR" && node src/index.js &
-CLAUDITY_PID=$!
+step "setting up auto-start"
+PLIST_NAME="ai.claudity.server"
+PLIST_PATH="$HOME/Library/LaunchAgents/${PLIST_NAME}.plist"
+NODE_PATH="$(which node)"
+mkdir -p "$INSTALL_DIR/data"
+
+launchctl bootout "gui/$(id -u)/${PLIST_NAME}" 2>/dev/null || true
+
+cat > "$PLIST_PATH" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>${PLIST_NAME}</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>${NODE_PATH}</string>
+    <string>${INSTALL_DIR}/src/index.js</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>${INSTALL_DIR}</string>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>${INSTALL_DIR}/data/claudity.log</string>
+  <key>StandardErrorPath</key>
+  <string>${INSTALL_DIR}/data/claudity.log</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin</string>
+  </dict>
+</dict>
+</plist>
+PLIST
+
+launchctl bootstrap "gui/$(id -u)" "$PLIST_PATH" 2>/dev/null || launchctl load "$PLIST_PATH" 2>/dev/null
 sleep 2
 
-if kill -0 "$CLAUDITY_PID" 2>/dev/null; then
-  ok "claudity is running"
+if curl -sf http://localhost:6767/api/auth/status >/dev/null 2>&1; then
+  ok "claudity is running and will restart automatically"
 else
-  warn "failed to start — run manually with: cd ~/claudity && npm start"
+  warn "service loaded but server not responding yet - check ~/claudity/data/claudity.log"
 fi
 
 boxlines \
@@ -338,6 +375,7 @@ boxlines \
   "" \
   "${green}http://localhost:6767${reset}" \
   "" \
-  "${dim}next time: cd ~/claudity && npm start${reset}"
+  "${dim}claudity starts automatically on login${reset}" \
+  "${dim}logs: ~/claudity/data/claudity.log${reset}"
 
 echo ""

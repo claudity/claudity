@@ -77,7 +77,7 @@ else
     echo -e "  option 1: run ${green}claude setup-token${reset} to connect your claude subscription"
     echo -e "  option 2: add ${green}API_KEY=sk-ant-api03-...${reset} to .env"
     echo ""
-    echo -e "  ${dim}you can finish this later — claudity will show a setup screen${reset}"
+    echo -e "  ${dim}you can finish this later - claudity will show a setup screen${reset}"
   fi
 fi
 

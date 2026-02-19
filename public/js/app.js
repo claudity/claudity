@@ -79,8 +79,8 @@ const platforms = [
     qrAuth: true,
     fields: [],
     setup: [
-      'requires <code>signal-cli</code> — install with <code>brew install signal-cli</code>',
-      'click connect below — a qr code will appear',
+      'requires <code>signal-cli</code> - install with <code>brew install signal-cli</code>',
+      'click connect below - a qr code will appear',
       'open signal on your phone → settings → linked devices → link new device',
       'scan the qr code with your phone camera',
       'after linking, reconnects automatically on restart'
@@ -129,7 +129,7 @@ const platforms = [
     fields: [],
     qrAuth: true,
     setup: [
-      'click connect below — a qr code will appear',
+      'click connect below - a qr code will appear',
       'open whatsapp on your phone → linked devices → link a device',
       'scan the qr code with your phone camera',
       'after first scan, reconnects automatically on restart'
@@ -243,6 +243,7 @@ async function selectAgent(id) {
   showSection('chat');
   $('section[aria-label="chat"] > header h2').textContent = activeAgent.name;
 
+  clearActivity();
   messagesDiv.innerHTML = '';
   chatInput.value = '';
   chatSubmit.disabled = false;
@@ -319,24 +320,37 @@ function scrollToBottom() {
 function showActivity() {
   let el = messagesDiv.querySelector('[data-activity]');
   if (el) return el;
+  if (chatSection.hidden) return null;
   el = document.createElement('div');
   el.dataset.activity = '';
   el.dataset.role = 'assistant';
   el.setAttribute('role', 'status');
   el.setAttribute('aria-label', 'agent is thinking');
   el.innerHTML = '<p data-dots><span></span><span></span><span></span></p>';
+  const row = document.createElement('div');
+  row.dataset.activityRow = '';
+  const stopBtn = document.createElement('button');
+  stopBtn.dataset.stop = '';
+  stopBtn.textContent = 'stop';
+  stopBtn.addEventListener('click', () => {
+    if (activeAgent) api('POST', `/api/agents/${activeAgent.id}/stop`).catch(() => {});
+  });
+  row.appendChild(stopBtn);
+  el.appendChild(row);
   messagesDiv.appendChild(el);
   scrollToBottom();
   return el;
 }
 
 function clearActivity() {
+  stopActivityTimer();
   const el = messagesDiv.querySelector('[data-activity]');
   if (el) el.remove();
 }
 
 function updateThinking(content) {
   const activity = showActivity();
+  if (!activity) return;
   let thinking = activity.querySelector('[data-thinking]');
   if (!thinking) {
     thinking = document.createElement('p');
@@ -349,15 +363,74 @@ function updateThinking(content) {
   scrollToBottom();
 }
 
+let activityStartTime = null;
+let toolStartTime = null;
+let activityTimer = null;
+let currentToolName = null;
+
+function formatElapsed(seconds) {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return m > 0 ? `${m}m ${s}s` : `${s}s`;
+}
+
+function startActivityTimer() {
+  if (activityTimer) return;
+  activityStartTime = activityStartTime || Date.now();
+  activityTimer = setInterval(() => {
+    const el = messagesDiv.querySelector('[data-status]');
+    if (!el) return;
+    const total = Math.floor((Date.now() - activityStartTime) / 1000);
+    const tool = currentToolName || 'thinking';
+    let text = `${tool}...`;
+    if (toolStartTime) {
+      const toolElapsed = Math.floor((Date.now() - toolStartTime) / 1000);
+      text += ` ${formatElapsed(toolElapsed)}`;
+    }
+    text += ` · total ${formatElapsed(total)}`;
+    el.textContent = text;
+  }, 1000);
+}
+
+function stopActivityTimer() {
+  if (activityTimer) { clearInterval(activityTimer); activityTimer = null; }
+  activityStartTime = null;
+  toolStartTime = null;
+  currentToolName = null;
+}
+
 function updateToolStatus(toolName) {
+  if (toolName !== currentToolName) { if (currentToolName !== null) toolStartTime = Date.now(); }
+  currentToolName = toolName;
   const activity = showActivity();
+  if (!activity) return;
+  const row = activity.querySelector('[data-activity-row]');
   let status = activity.querySelector('[data-status]');
-  if (!status) {
-    status = document.createElement('p');
+  if (!status && row) {
+    status = document.createElement('span');
     status.dataset.status = '';
-    activity.appendChild(status);
+    row.insertBefore(status, row.firstChild);
   }
-  status.textContent = `using ${toolName}...`;
+  if (!activityStartTime) activityStartTime = Date.now();
+  const total = Math.floor((Date.now() - activityStartTime) / 1000);
+  const toolElapsed = toolStartTime ? Math.floor((Date.now() - toolStartTime) / 1000) : 0;
+  if (status) status.textContent = `${toolName}... ${formatElapsed(toolElapsed)} · total ${formatElapsed(total)}`;
+  startActivityTimer();
+  const dots = activity.querySelector('[data-dots]');
+  if (dots) dots.remove();
+  scrollToBottom();
+}
+
+function updateStatusSummary(summary) {
+  const activity = showActivity();
+  if (!activity) return;
+  let el = activity.querySelector('[data-summary]');
+  if (!el) {
+    el = document.createElement('p');
+    el.dataset.summary = '';
+    activity.appendChild(el);
+  }
+  el.textContent = summary;
   const dots = activity.querySelector('[data-dots]');
   if (dots) dots.remove();
   scrollToBottom();
@@ -380,8 +453,11 @@ function connectSSE(agentId) {
   eventSource.addEventListener('typing', (e) => {
     try {
       const data = JSON.parse(e.data);
-      if (data.active) showActivity();
-      else clearActivity();
+      if (data.active) {
+        if (data.elapsed != null) activityStartTime = Date.now() - (data.elapsed * 1000);
+        showActivity();
+        startActivityTimer();
+      } else { clearActivity(); stopActivityTimer(); }
     } catch {}
   });
 
@@ -404,7 +480,16 @@ function connectSSE(agentId) {
   eventSource.addEventListener('tool_call', (e) => {
     try {
       const data = JSON.parse(e.data);
+      if (data.elapsed != null && !activityStartTime) activityStartTime = Date.now() - (data.elapsed * 1000);
+      if (data.toolElapsed != null && !currentToolName) toolStartTime = Date.now() - (data.toolElapsed * 1000);
       updateToolStatus(data.name);
+    } catch {}
+  });
+
+  eventSource.addEventListener('status_update', (e) => {
+    try {
+      const data = JSON.parse(e.data);
+      updateStatusSummary(data.summary);
     } catch {}
   });
 
@@ -464,6 +549,15 @@ function connectSSE(agentId) {
     }
   });
 
+  eventSource.addEventListener('stopped', () => {
+    clearActivity();
+    const div = document.createElement('div');
+    div.dataset.role = 'system';
+    div.innerHTML = '<p>stopped</p>';
+    messagesDiv.appendChild(div);
+    scrollToBottom();
+  });
+
   eventSource.addEventListener('error', (e) => {
     clearActivity();
     try {
@@ -503,7 +597,7 @@ async function renderConnections() {
     let statusLabel = status;
     if (status === 'connected' && conn.status_detail) statusLabel = conn.status_detail;
 
-    return `<article data-platform="${p.id}" data-status="${status}"${p.comingSoon ? ' data-coming-soon' : ''} title="${p.comingSoon ? p.name + ' — coming soon' : p.name + ' — ' + statusLabel}" role="${p.comingSoon ? 'presentation' : 'button'}" ${p.comingSoon ? '' : 'tabindex="0"'}>
+    return `<article data-platform="${p.id}" data-conn-status="${status}"${p.comingSoon ? ' data-coming-soon' : ''} title="${p.comingSoon ? p.name + ' - coming soon' : p.name + ' - ' + statusLabel}" role="${p.comingSoon ? 'presentation' : 'button'}" ${p.comingSoon ? '' : 'tabindex="0"'}>
       ${p.icon}
       <div><h3>${p.name}</h3><p>${p.comingSoon ? 'coming soon' : statusLabel}</p></div>
       <span data-indicator="${status}" aria-label="${status}"></span>
@@ -729,8 +823,17 @@ function autoResize() {
 
 chatInput.addEventListener('input', autoResize);
 
+const agentNames = ['007','agent 47','agent alman','agent p','archer','aunt arctic','bishop','bourne','bullock','cobra','dynamo','gru','macgyver','mcgruff','mortadelo','payne','perry','powers','shadow','sherlock','slylock','verloc'];
+
 $('nav[aria-label="agents"] header button').addEventListener('click', () => {
   $('dialog[aria-label="create agent"] form').reset();
+  $('dialog[aria-label="create agent"] input[name="name"]').placeholder = agentNames[Math.floor(Math.random() * agentNames.length)];
+  createDialog.showModal();
+});
+
+$('[data-action="create-agent-link"]').addEventListener('click', () => {
+  $('dialog[aria-label="create agent"] form').reset();
+  $('dialog[aria-label="create agent"] input[name="name"]').placeholder = agentNames[Math.floor(Math.random() * agentNames.length)];
   createDialog.showModal();
 });
 
@@ -741,7 +844,7 @@ $('dialog[aria-label="create agent"] form').addEventListener('submit', async (e)
     name: form.name.value.trim(),
     is_default: form.is_default.checked,
     model: form.model.value,
-    thinking: form.thinking.value
+    effort: form.effort.value
   };
   try {
     const agent = await api('POST', '/api/agents', data);
@@ -780,7 +883,7 @@ $('button[data-action="edit-agent"]').addEventListener('click', () => {
   }
   form.querySelector('[name="show_heartbeat"]').checked = !!activeAgent.show_heartbeat;
   form.querySelector('[name="model"]').value = activeAgent.model || 'opus';
-  form.querySelector('[name="thinking"]').value = activeAgent.thinking || 'high';
+  form.querySelector('[name="effort"]').value = activeAgent.effort || 'high';
   editDialog.showModal();
 });
 
@@ -795,7 +898,7 @@ $('dialog[aria-label="edit agent"] form').addEventListener('submit', async (e) =
     heartbeat_interval: heartbeatEnabled ? parseInt(form.querySelector('[name="heartbeat_interval"]').value) : null,
     show_heartbeat: form.querySelector('[name="show_heartbeat"]').checked,
     model: form.querySelector('[name="model"]').value,
-    thinking: form.querySelector('[name="thinking"]').value
+    effort: form.querySelector('[name="effort"]').value
   };
   try {
     const updated = await api('PATCH', `/api/agents/${id}`, data);
@@ -1038,7 +1141,7 @@ $('form[aria-label="setup-token"]').addEventListener('submit', async (e) => {
   const input = $('form[aria-label="setup-token"] input');
   const token = input.value.trim();
   if (!token) return;
-  if (!token.startsWith('sk-ant-oat')) return showDialogError(setupTokenDialog, 'invalid setup token — must start with sk-ant-oat. if you have an api key, use the api key option instead.');
+  if (!token.startsWith('sk-ant-oat')) return showDialogError(setupTokenDialog, 'invalid setup token - must start with sk-ant-oat. if you have an api key, use the api key option instead.');
   try {
     await api('POST', '/api/auth/setup-token', { token });
     setupTokenDialog.close();
@@ -1054,7 +1157,7 @@ $('form[aria-label="api-key"]').addEventListener('submit', async (e) => {
   const input = $('form[aria-label="api-key"] input');
   const key = input.value.trim();
   if (!key) return;
-  if (!key.startsWith('sk-ant-api')) return showDialogError(apiKeyDialog, 'invalid api key — must start with sk-ant-api. if you have a setup token, use the setup token option instead.');
+  if (!key.startsWith('sk-ant-api')) return showDialogError(apiKeyDialog, 'invalid api key - must start with sk-ant-api. if you have a setup token, use the setup token option instead.');
   try {
     await api('POST', '/api/auth/api-key', { key });
     apiKeyDialog.close();

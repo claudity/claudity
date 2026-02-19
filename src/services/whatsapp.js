@@ -89,9 +89,9 @@ function start(config, callbacks) {
       }
     } catch (err) {
       message.reply(`error: ${err.message}`).catch(() => {});
+    } finally {
+      busy = false;
     }
-
-    setTimeout(() => { busy = false; }, 2000);
   });
 
   client.initialize().catch((err) => {

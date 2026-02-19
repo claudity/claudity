@@ -66,7 +66,6 @@ function startDaemon(phone, onStatus, chatModule, stmts) {
         }
 
         if (!text || !sender) continue;
-        if (!sender) continue;
 
         let parsed = parseMessage(text);
         let agent;
@@ -191,7 +190,7 @@ function startLinking(onStatus, chatModule, stmts, updateConfig) {
 
     if (!linked) {
       log(`link process exited with code ${code}`);
-      if (onStatus) onStatus('error', 'linking failed — scan the qr code within 60 seconds');
+      if (onStatus) onStatus('error', 'linking failed - scan the qr code within 60 seconds');
     }
   });
 
@@ -204,7 +203,7 @@ function start(config, callbacks) {
   const { onStatus } = callbacks || {};
 
   if (!signalCliAvailable()) {
-    if (onStatus) onStatus('error', 'signal-cli not found — install with: brew install signal-cli');
+    if (onStatus) onStatus('error', 'signal-cli not found - install with: brew install signal-cli');
     return;
   }
 

@@ -139,7 +139,7 @@ function startConsolidation() {
         if (memories.length < 5) continue;
 
         const memoryList = memories.map(m => `- ${m.summary}`).join('\n');
-        const systemPrompt = `you are a memory consolidation tool. your ONLY job is to deduplicate and clean up a list of factual memories. output ONLY a bullet list — one fact per line, each starting with "- ". do NOT add commentary, explanations, confirmations, or any text that is not a memory. do NOT say "done" or "here is your list" or anything like that. just output the cleaned list.`;
+        const systemPrompt = `you are a memory consolidation tool. your ONLY job is to deduplicate and clean up a list of factual memories. output ONLY a bullet list - one fact per line, each starting with "- ". do NOT add commentary, explanations, confirmations, or any text that is not a memory. do NOT say "done" or "here is your list" or anything like that. just output the cleaned list.`;
 
         const result = await callLightweight(memoryList, systemPrompt);
         if (!result || result.trim().toLowerCase() === 'none') continue;
@@ -153,7 +153,7 @@ function startConsolidation() {
 
         if (lines.length === 0) continue;
         if (lines.length < memories.length * 0.3) {
-          console.log(`[memory] skipping consolidation for ${agent.name} — output too small (${lines.length} vs ${memories.length})`);
+          console.log(`[memory] skipping consolidation for ${agent.name} - output too small (${lines.length} vs ${memories.length})`);
           continue;
         }
 

@@ -8,6 +8,7 @@ const workspace = require('./workspace');
 const agentStreams = new Map();
 const messageQueues = new Map();
 const processingAgents = new Set();
+const agentActivity = new Map();
 
 function addStream(agentId, res) {
   if (!agentStreams.has(agentId)) agentStreams.set(agentId, []);
@@ -84,28 +85,28 @@ your workspace is at data/agents/${workspace.sanitizeName(agent.name)}/. use wri
 
   if (dailyLogs) prompt += `recent context:\n${dailyLogs}\n\n`;
 
-  prompt += `adapt your tone and style naturally to match whoever you are talking to. be personable. you are not a task executor — you are a conversational agent who can also get things done when asked.
+  prompt += `adapt your tone and style naturally to match whoever you are talking to. be personable. you are not a task executor - you are a conversational agent who can also get things done when asked.
 
-you have full machine access — bash, file read/write/edit, glob, grep — all available as built-in tools in your environment. use them freely to accomplish tasks: run commands, read/write files, explore the filesystem, execute scripts, etc.
+you have full machine access - bash, file read/write/edit, glob, grep - all available as built-in tools in your environment. use them freely to accomplish tasks: run commands, read/write files, explore the filesystem, execute scripts, etc.
 
 available claudity tools:
 ${toolList}
 
 use spawn_subagent to offload complex or time-consuming work (writing code, running multi-step commands, analysis) to an ephemeral subprocess. the subagent has full machine access but no claudity tools or memory.
 
-use delegate to collaborate with other agents — send a message to another agent by name and get their response. useful when a task falls in another agent's domain.
+use delegate to collaborate with other agents - send a message to another agent by name and get their response. useful when a task falls in another agent's domain.
 
 your memories are automatically extracted from conversations and written to daily logs. use the remember tool for critical standing instructions or preferences you must never lose.
 
 your workspace is at data/agents/${workspace.sanitizeName(agent.name)}/. you can read and write your own files using read_workspace and write_workspace. your soul, identity, memory, and heartbeat files are yours to evolve.
 
-when using tools, just use them naturally as part of the conversation — no need to announce plans or ask permission. when interacting with external platforms, read their documentation first to understand the api.
+when using tools, just use them naturally as part of the conversation - no need to announce plans or ask permission. when interacting with external platforms, read their documentation first to understand the api.
 
 if the user asks you to do something repeatedly or on a schedule, use the schedule_task tool to set it up. you will receive scheduled reminders as messages and should act on them autonomously.
 
-when you receive a [scheduled reminder], just do the thing — no need to announce that it was a reminder. act naturally.
+when you receive a [scheduled reminder], just do the thing - no need to announce that it was a reminder. act naturally.
 
-CRITICAL: users cannot see tool results. they only see your final text response. when you use tools, you MUST include every key detail from the results — urls, links, claim links, confirmation codes, registration links, usernames, error messages, anything actionable. if you don't include it in your response, the user will never see it. never summarize away actionable information.
+CRITICAL: users cannot see tool results. they only see your final text response. when you use tools, you MUST include every key detail from the results - urls, links, claim links, confirmation codes, registration links, usernames, error messages, anything actionable. if you don't include it in your response, the user will never see it. never summarize away actionable information.
 
 you know nothing about the user until they tell you. do not infer, guess, or use any username, file path, hostname, or environment variable to identify them. if you see a username in a path or system info, ignore it completely. never address the user by name until they introduce themselves.`;
 
@@ -146,17 +147,36 @@ async function handleMessage(agentId, userContent, options = {}) {
 
   if (!isHeartbeat) {
     processingAgents.add(agentId);
+    agentActivity.set(agentId, { startTime: Date.now(), tool: null, toolStartTime: null, summary: null });
     emit(agentId, 'typing', { active: true });
   }
 
   let responseComplete = false;
+  const startTime = Date.now();
+  let lastToolName = null;
+  let statusInterval = null;
+
+  if (!isHeartbeat) {
+    statusInterval = setInterval(async () => {
+      const elapsed = Math.floor((Date.now() - startTime) / 1000);
+      const tool = lastToolName || 'thinking';
+      try {
+        const summary = await claude.generateStatus(tool, elapsed, agent.name);
+        if (summary) {
+          const state = agentActivity.get(agentId);
+          if (state) state.summary = summary;
+          emit(agentId, 'status_update', { elapsed, summary, tool });
+        }
+      } catch {}
+    }, 60000);
+  }
 
   const systemPrompt = buildSystemPrompt(agent);
   const toolDefs = tools.getAllToolDefinitions();
   const isBootstrap = agent.bootstrapped === 0;
   const sessionAgentId = (!isBootstrap && !isHeartbeat) ? agentId : null;
   const model = agent.model || 'opus';
-  const thinking = (isBootstrap || isHeartbeat) ? 'low' : (agent.thinking || 'high');
+  const effort = (isBootstrap || isHeartbeat) ? 'low' : (agent.effort || 'high');
 
   let messages = isHeartbeat
     ? [{ role: 'user', content: userContent }]
@@ -165,10 +185,24 @@ async function handleMessage(agentId, userContent, options = {}) {
   let allToolCalls = [];
   let intermediateTexts = [];
 
-  const wantsAck = !isHeartbeat && !isScheduled && agent.bootstrapped !== 0;
+  const wantsAck = !isHeartbeat && !isScheduled && !isBootstrap;
   const ackPromise = wantsAck
     ? claude.generateQuickAck(userContent, agent.name).catch(() => null)
     : Promise.resolve(null);
+
+  const onEvent = !isHeartbeat ? (event) => {
+    if (event.type === 'assistant' && event.message && event.message.content) {
+      const elapsed = Math.floor((Date.now() - startTime) / 1000);
+      for (const block of event.message.content) {
+        if (block.type === 'tool_use') {
+          lastToolName = block.name;
+          const state = agentActivity.get(agentId);
+          if (state) { state.tool = block.name; state.toolStartTime = Date.now(); }
+          emit(agentId, 'tool_call', { name: block.name, input: block.input, elapsed });
+        }
+      }
+    }
+  } : null;
 
   const mainPromise = claude.sendMessage({
     system: systemPrompt,
@@ -177,8 +211,9 @@ async function handleMessage(agentId, userContent, options = {}) {
     maxTokens: 4096,
     agentId: sessionAgentId,
     model,
-    thinking,
-    noBuiltinTools: isBootstrap
+    effort,
+    noBuiltinTools: isBootstrap,
+    onEvent
   });
 
   try {
@@ -223,7 +258,9 @@ async function handleMessage(agentId, userContent, options = {}) {
       const toolResults = [];
 
       for (const call of calls) {
-        emit(agentId, 'tool_call', { name: call.name, input: call.input });
+        lastToolName = call.name;
+        const elapsed = Math.floor((Date.now() - startTime) / 1000);
+        emit(agentId, 'tool_call', { name: call.name, input: call.input, elapsed });
 
         try {
           const result = await tools.executeTool(call.name, call.input, { agentId });
@@ -257,8 +294,9 @@ async function handleMessage(agentId, userContent, options = {}) {
         maxTokens: 4096,
         agentId: sessionAgentId,
         model,
-        thinking,
-        noBuiltinTools: isBootstrap
+        effort,
+        noBuiltinTools: isBootstrap,
+        onEvent
       });
     }
 
@@ -311,13 +349,8 @@ async function handleMessage(agentId, userContent, options = {}) {
 
     stmts.createMessage.run(assistantMsgId, agentId, 'assistant', responseText, toolCallsJson);
 
-    if (isBootstrap && stmts.getAgent.get(agentId)?.bootstrapped === 0) {
-      const msgCount = stmts.listMessages.all(agentId).filter(m => m.role === 'user').length;
-      if (msgCount >= 4) {
-        stmts.setBootstrapped.run(1, agentId);
-        workspace.deleteFile(agent.name, 'BOOTSTRAP.md');
-        emit(agentId, 'bootstrap_complete', {});
-      }
+    if (isBootstrap && stmts.getAgent.get(agentId)?.bootstrapped !== 0) {
+      emit(agentId, 'bootstrap_complete', {});
     }
 
     if (!isHeartbeat) {
@@ -326,8 +359,10 @@ async function handleMessage(agentId, userContent, options = {}) {
       });
     }
 
+    if (statusInterval) clearInterval(statusInterval);
     responseComplete = true;
     processingAgents.delete(agentId);
+    agentActivity.delete(agentId);
     emit(agentId, 'typing', { active: false });
     emit(agentId, 'assistant_message', {
       id: assistantMsgId,
@@ -338,10 +373,13 @@ async function handleMessage(agentId, userContent, options = {}) {
     return { id: assistantMsgId, content: responseText, tool_calls: allToolCalls.length ? allToolCalls : null };
 
   } catch (err) {
+    if (statusInterval) clearInterval(statusInterval);
     responseComplete = true;
     processingAgents.delete(agentId);
+    agentActivity.delete(agentId);
     if (!isHeartbeat) emit(agentId, 'typing', { active: false });
-    if (!isHeartbeat) emit(agentId, 'error', { error: err.message });
+    if (!isHeartbeat && err.message !== 'aborted') emit(agentId, 'error', { error: err.message });
+    if (err.message === 'aborted') return;
     throw err;
   }
 }
@@ -362,4 +400,18 @@ function isProcessing(agentId) {
   return processingAgents.has(agentId);
 }
 
-module.exports = { handleMessage, enqueueMessage, addStream, removeStream, emit, isProcessing };
+function stopAgent(agentId) {
+  if (!processingAgents.has(agentId)) return false;
+  claude.abort(agentId);
+  processingAgents.delete(agentId);
+  agentActivity.delete(agentId);
+  emit(agentId, 'typing', { active: false });
+  emit(agentId, 'stopped', {});
+  return true;
+}
+
+function getActivity(agentId) {
+  return agentActivity.get(agentId) || null;
+}
+
+module.exports = { handleMessage, enqueueMessage, addStream, removeStream, emit, isProcessing, stopAgent, getActivity };
