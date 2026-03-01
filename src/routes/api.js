@@ -3,6 +3,7 @@ const { v4: uuid } = require('uuid');
 const { stmts } = require('../db');
 const auth = require('../services/auth');
 const chat = require('../services/chat');
+const claude = require('../services/claude');
 const workspace = require('../services/workspace');
 const heartbeat = require('../services/heartbeat');
 
@@ -121,6 +122,23 @@ router.delete('/agents/:id/messages', (req, res) => {
   res.json({ cleared: true });
 });
 
+router.get('/agents/:id/usage', (req, res) => {
+  const agent = stmts.getAgent.get(req.params.id);
+  if (!agent) return res.status(404).json({ error: 'agent not found' });
+  const totals = stmts.agentUsageTotals.get(req.params.id);
+  res.json(totals);
+});
+
+router.get('/quota', async (req, res) => {
+  try {
+    const quota = await claude.probeQuota();
+    if (!quota) return res.json({ available: false });
+    res.json({ available: true, ...quota });
+  } catch {
+    res.json({ available: false });
+  }
+});
+
 router.post('/agents/:id/stop', (req, res) => {
   const stopped = chat.stopAgent(req.params.id);
   res.json({ stopped });
@@ -156,12 +174,12 @@ router.get('/agents/:id/stream', (req, res) => {
     const elapsed = activity ? Math.floor((Date.now() - activity.startTime) / 1000) : 0;
     res.write(`event: typing\ndata: ${JSON.stringify({ active: true, elapsed })}\n\n`);
     if (activity) {
+      if (activity.intermediateText) {
+        res.write(`event: intermediate\ndata: ${JSON.stringify({ content: activity.intermediateText, elapsed })}\n\n`);
+      }
       if (activity.tool) {
         const toolElapsed = activity.toolStartTime ? Math.floor((Date.now() - activity.toolStartTime) / 1000) : 0;
         res.write(`event: tool_call\ndata: ${JSON.stringify({ name: activity.tool, elapsed, toolElapsed })}\n\n`);
-      }
-      if (activity.summary) {
-        res.write(`event: status_update\ndata: ${JSON.stringify({ summary: activity.summary, elapsed, tool: activity.tool || 'thinking' })}\n\n`);
       }
     }
   }

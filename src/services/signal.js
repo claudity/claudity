@@ -83,10 +83,19 @@ function startDaemon(phone, onStatus, chatModule, stmts) {
 
         log(`${parsed.agent}: ${parsed.command}`);
 
+        let lastAcked = null;
+        let lastAckTime = Date.now();
+
         chatModule.enqueueMessage(agent.id, parsed.command, {
-          onAck: (ackText) => send(sender, ackText)
+          onAck: (ackText) => {
+            if (Date.now() - lastAckTime < 15000) return;
+            lastAckTime = Date.now();
+            lastAcked = ackText;
+            send(sender, ackText);
+          }
         }).then((result) => {
           if (result && result.content) {
+            if (lastAcked && (result.content === lastAcked || result.content.startsWith(lastAcked) || lastAcked.startsWith(result.content))) return;
             let reply = result.content;
             if (reply.length > MAX_RESPONSE_LENGTH) {
               reply = reply.slice(0, MAX_RESPONSE_LENGTH) + '...';

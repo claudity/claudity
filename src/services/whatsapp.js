@@ -76,16 +76,26 @@ function start(config, callbacks) {
     log(`${parsed.agent}: ${parsed.command}`);
     busy = true;
 
+    let lastAcked = null;
+    let lastAckTime = Date.now();
+
     try {
       const result = await chatModule.enqueueMessage(agent.id, parsed.command, {
-        onAck: (text) => message.reply(text).catch(() => {})
+        onAck: (text) => {
+          if (Date.now() - lastAckTime < 15000) return;
+          lastAckTime = Date.now();
+          lastAcked = text;
+          message.reply(text).catch(() => {});
+        }
       });
       if (result && result.content) {
-        let text = result.content;
-        if (text.length > MAX_RESPONSE_LENGTH) {
-          text = text.slice(0, MAX_RESPONSE_LENGTH) + '...';
+        if (!(lastAcked && (result.content === lastAcked || result.content.startsWith(lastAcked) || lastAcked.startsWith(result.content)))) {
+          let text = result.content;
+          if (text.length > MAX_RESPONSE_LENGTH) {
+            text = text.slice(0, MAX_RESPONSE_LENGTH) + '...';
+          }
+          await message.reply(text);
         }
-        await message.reply(text);
       }
     } catch (err) {
       message.reply(`error: ${err.message}`).catch(() => {});

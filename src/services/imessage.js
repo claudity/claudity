@@ -155,11 +155,19 @@ function poll() {
 }
 
 async function handleCommand(agent, command, chatGuid) {
+  let lastAcked = null;
+  let lastAckTime = Date.now();
   try {
     const result = await chatModule.enqueueMessage(agent.id, command, {
-      onAck: (text) => sendMessage(chatGuid, text)
+      onAck: (text) => {
+        if (Date.now() - lastAckTime < 15000) return;
+        lastAckTime = Date.now();
+        lastAcked = text;
+        sendMessage(chatGuid, text);
+      }
     });
     if (result && result.content) {
+      if (lastAcked && (result.content === lastAcked || result.content.startsWith(lastAcked) || lastAcked.startsWith(result.content))) return;
       sendMessage(chatGuid, result.content);
     }
   } catch (err) {

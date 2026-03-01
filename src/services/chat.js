@@ -100,7 +100,7 @@ your memories are automatically extracted from conversations and written to dail
 
 your workspace is at data/agents/${workspace.sanitizeName(agent.name)}/. you can read and write your own files using read_workspace and write_workspace. your soul, identity, memory, and heartbeat files are yours to evolve.
 
-when using tools, just use them naturally as part of the conversation - no need to announce plans or ask permission. when interacting with external platforms, read their documentation first to understand the api.
+always tell the user what you're about to do before doing it. share your plan, intention, or approach in natural language first, then use tools to execute. don't ask permission - just say what you're doing and do it. when interacting with external platforms, read their documentation first to understand the api.
 
 if the user asks you to do something repeatedly or on a schedule, use the schedule_task tool to set it up. you will receive scheduled reminders as messages and should act on them autonomously.
 
@@ -137,7 +137,6 @@ async function handleMessage(agentId, userContent, options = {}) {
   if (!agent) throw new Error('agent not found');
 
   const isHeartbeat = !!options.heartbeat;
-  const isScheduled = typeof userContent === 'string' && userContent.startsWith('[scheduled reminder]');
 
   if (!isHeartbeat) {
     const userMsgId = uuid();
@@ -147,29 +146,12 @@ async function handleMessage(agentId, userContent, options = {}) {
 
   if (!isHeartbeat) {
     processingAgents.add(agentId);
-    agentActivity.set(agentId, { startTime: Date.now(), tool: null, toolStartTime: null, summary: null });
+    agentActivity.set(agentId, { startTime: Date.now(), tool: null, toolStartTime: null, intermediateText: null });
     emit(agentId, 'typing', { active: true });
   }
 
-  let responseComplete = false;
   const startTime = Date.now();
   let lastToolName = null;
-  let statusInterval = null;
-
-  if (!isHeartbeat) {
-    statusInterval = setInterval(async () => {
-      const elapsed = Math.floor((Date.now() - startTime) / 1000);
-      const tool = lastToolName || 'thinking';
-      try {
-        const summary = await claude.generateStatus(tool, elapsed, agent.name);
-        if (summary) {
-          const state = agentActivity.get(agentId);
-          if (state) state.summary = summary;
-          emit(agentId, 'status_update', { elapsed, summary, tool });
-        }
-      } catch {}
-    }, 60000);
-  }
 
   const systemPrompt = buildSystemPrompt(agent);
   const toolDefs = tools.getAllToolDefinitions();
@@ -184,25 +166,36 @@ async function handleMessage(agentId, userContent, options = {}) {
 
   let allToolCalls = [];
   let intermediateTexts = [];
-
-  const wantsAck = !isHeartbeat && !isScheduled && !isBootstrap;
-  const ackPromise = wantsAck
-    ? claude.generateQuickAck(userContent, agent.name).catch(() => null)
-    : Promise.resolve(null);
+  const totalUsage = { input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_write_tokens: 0 };
 
   const onEvent = !isHeartbeat ? (event) => {
-    if (event.type === 'assistant' && event.message && event.message.content) {
-      const elapsed = Math.floor((Date.now() - startTime) / 1000);
-      for (const block of event.message.content) {
-        if (block.type === 'tool_use') {
-          lastToolName = block.name;
-          const state = agentActivity.get(agentId);
-          if (state) { state.tool = block.name; state.toolStartTime = Date.now(); }
-          emit(agentId, 'tool_call', { name: block.name, input: block.input, elapsed });
+    if (event.type !== 'assistant' || !event.message?.content) return;
+
+    const elapsed = Math.floor((Date.now() - startTime) / 1000);
+
+    for (const block of event.message.content) {
+      if (block.type === 'tool_use') {
+        lastToolName = block.name;
+        const state = agentActivity.get(agentId);
+        if (state) { state.tool = block.name; state.toolStartTime = Date.now(); }
+        emit(agentId, 'tool_call', { name: block.name, input: block.input, elapsed });
+      } else if (block.type === 'text' && block.text?.trim()) {
+        const text = block.text.trim();
+        const state = agentActivity.get(agentId);
+        if (state) state.intermediateText = text;
+        emit(agentId, 'intermediate', { content: text, elapsed });
+        if (options.onAck) {
+          try { options.onAck(text); } catch {}
         }
       }
     }
   } : null;
+
+  const ackThinking = (text) => {
+    if (options.onAck && text) {
+      try { options.onAck(text); } catch {}
+    }
+  };
 
   const mainPromise = claude.sendMessage({
     system: systemPrompt,
@@ -217,30 +210,12 @@ async function handleMessage(agentId, userContent, options = {}) {
   });
 
   try {
-    let response;
-
-    if (wantsAck) {
-      const raceResult = await Promise.race([
-        mainPromise.then(r => ({ type: 'main', result: r })),
-        new Promise(resolve => setTimeout(() => resolve({ type: 'timeout' }), 8000))
-      ]);
-
-      if (raceResult.type === 'main') {
-        response = raceResult.result;
-      } else {
-        const quickAck = await ackPromise;
-        if (quickAck) {
-          const ackMsgId = uuid();
-          stmts.createMessage.run(ackMsgId, agentId, 'assistant', quickAck, null);
-          emit(agentId, 'typing', { active: false });
-          emit(agentId, 'ack_message', { content: quickAck });
-          if (options.onAck) options.onAck(quickAck);
-          emit(agentId, 'typing', { active: true });
-        }
-        response = await mainPromise;
-      }
-    } else {
-      response = await mainPromise;
+    let response = await mainPromise;
+    if (response.usage) {
+      totalUsage.input_tokens += response.usage.input_tokens;
+      totalUsage.output_tokens += response.usage.output_tokens;
+      totalUsage.cache_read_tokens += response.usage.cache_read_tokens;
+      totalUsage.cache_write_tokens += response.usage.cache_write_tokens;
     }
 
     while (claude.hasToolUse(response)) {
@@ -250,7 +225,10 @@ async function handleMessage(agentId, userContent, options = {}) {
 
       if (thinkingText) {
         intermediateTexts.push(thinkingText);
+        const state = agentActivity.get(agentId);
+        if (state) state.intermediateText = thinkingText;
         emit(agentId, 'intermediate', { content: thinkingText });
+        ackThinking(thinkingText);
       }
 
       messages.push({ role: 'assistant', content: response.content });
@@ -298,6 +276,12 @@ async function handleMessage(agentId, userContent, options = {}) {
         noBuiltinTools: isBootstrap,
         onEvent
       });
+      if (response.usage) {
+        totalUsage.input_tokens += response.usage.input_tokens;
+        totalUsage.output_tokens += response.usage.output_tokens;
+        totalUsage.cache_read_tokens += response.usage.cache_read_tokens;
+        totalUsage.cache_write_tokens += response.usage.cache_write_tokens;
+      }
     }
 
     let rawText = claude.extractText(response);
@@ -334,11 +318,9 @@ async function handleMessage(agentId, userContent, options = {}) {
       const stripped = responseText.replace(/\s+/g, ' ').trim();
       const isOk = stripped.includes('HEARTBEAT_OK') && stripped.length <= 300;
       if (isOk) {
-        responseComplete = true;
         return { id: null, content: responseText, suppressed: true };
       }
       stmts.createHeartbeatMessage.run(assistantMsgId, agentId, 'assistant', responseText, toolCallsJson);
-      responseComplete = true;
       emit(agentId, 'heartbeat_alert', {
         id: assistantMsgId,
         content: responseText,
@@ -348,6 +330,13 @@ async function handleMessage(agentId, userContent, options = {}) {
     }
 
     stmts.createMessage.run(assistantMsgId, agentId, 'assistant', responseText, toolCallsJson);
+
+    if (totalUsage.input_tokens > 0 || totalUsage.output_tokens > 0) {
+      try {
+        stmts.createUsage.run(uuid(), agentId, totalUsage.input_tokens, totalUsage.output_tokens, totalUsage.cache_read_tokens, totalUsage.cache_write_tokens);
+      } catch {}
+      emit(agentId, 'usage', totalUsage);
+    }
 
     if (isBootstrap && stmts.getAgent.get(agentId)?.bootstrapped !== 0) {
       emit(agentId, 'bootstrap_complete', {});
@@ -359,8 +348,6 @@ async function handleMessage(agentId, userContent, options = {}) {
       });
     }
 
-    if (statusInterval) clearInterval(statusInterval);
-    responseComplete = true;
     processingAgents.delete(agentId);
     agentActivity.delete(agentId);
     emit(agentId, 'typing', { active: false });
@@ -373,8 +360,6 @@ async function handleMessage(agentId, userContent, options = {}) {
     return { id: assistantMsgId, content: responseText, tool_calls: allToolCalls.length ? allToolCalls : null };
 
   } catch (err) {
-    if (statusInterval) clearInterval(statusInterval);
-    responseComplete = true;
     processingAgents.delete(agentId);
     agentActivity.delete(agentId);
     if (!isHeartbeat) emit(agentId, 'typing', { active: false });
@@ -392,6 +377,7 @@ function enqueueMessage(agentId, content, options = {}) {
       messageQueues.delete(agentId);
     }
   });
+  tracked.catch(() => {});
   messageQueues.set(agentId, tracked);
   return chained;
 }

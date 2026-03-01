@@ -107,6 +107,23 @@ db.exec(`
   )
 `);
 
+db.exec(`
+  create table if not exists token_usage (
+    id text primary key,
+    agent_id text not null,
+    input_tokens integer not null default 0,
+    output_tokens integer not null default 0,
+    cache_read_tokens integer not null default 0,
+    cache_write_tokens integer not null default 0,
+    created_at datetime default current_timestamp,
+    foreign key (agent_id) references agents(id) on delete cascade
+  )
+`);
+
+try {
+  db.exec('create index if not exists idx_token_usage_agent on token_usage(agent_id)');
+} catch {}
+
 const stmts = {
   getConfig: db.prepare('select value from config where key = ?'),
   setConfig: db.prepare('insert into config (key, value, updated_at) values (?, ?, current_timestamp) on conflict(key) do update set value = excluded.value, updated_at = current_timestamp'),
@@ -157,6 +174,9 @@ const stmts = {
   getSession: db.prepare('select * from sessions where agent_id = ?'),
   upsertSession: db.prepare('insert into sessions (agent_id, session_id, prompt_hash, updated_at) values (?, ?, ?, current_timestamp) on conflict(agent_id) do update set session_id = excluded.session_id, prompt_hash = excluded.prompt_hash, updated_at = current_timestamp'),
   deleteSession: db.prepare('delete from sessions where agent_id = ?'),
+
+  createUsage: db.prepare('insert into token_usage (id, agent_id, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens) values (?, ?, ?, ?, ?, ?)'),
+  agentUsageTotals: db.prepare('select coalesce(sum(input_tokens), 0) as input_tokens, coalesce(sum(output_tokens), 0) as output_tokens, coalesce(sum(cache_read_tokens), 0) as cache_read_tokens, coalesce(sum(cache_write_tokens), 0) as cache_write_tokens from token_usage where agent_id = ?'),
 };
 
 module.exports = { db, stmts };

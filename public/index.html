@@ -8,7 +8,7 @@
   <meta name="theme-color" content="#000000">
   <meta name="color-scheme" content="dark">
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="css/style.css?cb=12">
+  <link rel="stylesheet" href="css/style.css?cb=20">
 </head>
 <body>
   <button type="button" aria-label="menu" aria-expanded="false" aria-controls="agent-nav" title="menu" data-action="toggle-nav">
@@ -113,6 +113,24 @@
       </header>
 
       <div aria-label="messages" role="log" aria-live="polite"></div>
+
+      <div data-usage-bar hidden>
+        <div data-quota-session>
+          <div data-quota-header><span>session</span><span data-quota-pct>0%</span></div>
+          <div data-quota-track><div data-quota-fill></div></div>
+          <div data-quota-reset></div>
+        </div>
+        <div data-quota-weekly>
+          <div data-quota-header><span>weekly</span><span data-quota-pct>0%</span></div>
+          <div data-quota-track><div data-quota-fill></div></div>
+          <div data-quota-reset></div>
+        </div>
+        <div data-quota-overage>
+          <div data-quota-header><span>extra usage</span><span data-quota-pct>0%</span></div>
+          <div data-quota-track><div data-quota-fill></div></div>
+          <div data-quota-reset></div>
+        </div>
+      </div>
 
       <form aria-label="input">
         <textarea placeholder="say something..." rows="1" aria-label="message"></textarea>
@@ -257,6 +275,6 @@
     </footer>
   </dialog>
 
-  <script src="js/app.js?cb=12"></script>
+  <script src="js/app.js?cb=20"></script>
 </body>
 </html>

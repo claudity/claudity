@@ -10,6 +10,28 @@ const API_URL = 'https://api.anthropic.com/v1/messages';
 const MODEL = 'claude-opus-4-6';
 const activeProcesses = new Map();
 
+let supportsEffort = null;
+function checkEffortSupport() {
+  if (supportsEffort !== null) return supportsEffort;
+  try {
+    const { execSync } = require('child_process');
+    const help = execSync('claude --help 2>&1', { encoding: 'utf8' });
+    supportsEffort = help.includes('--effort');
+  } catch {
+    supportsEffort = false;
+  }
+  return supportsEffort;
+}
+
+function applyEffort(args, extraEnv, effort) {
+  if (checkEffortSupport()) {
+    args.push('--effort', effort);
+  } else {
+    const tokens = { low: '0', medium: '16000', high: '31999' };
+    extraEnv.MAX_THINKING_TOKENS = tokens[effort] || '31999';
+  }
+}
+
 function hashPrompt(str) {
   let h = 0;
   for (let i = 0; i < str.length; i++) {
@@ -143,9 +165,12 @@ function runCli(args, input, extraEnv = {}, agentId = null, onEvent = null) {
         }
       }
     });
-    proc.stderr.on('data', d => stderr += d);
+    proc.stderr.on('data', d => {
+      stderr += d;
+    });
 
     proc.on('close', code => {
+      try { fs.rmSync(cwd, { recursive: true, force: true }); } catch {}
       if (done) return;
       done = true;
       if (agentId) activeProcesses.delete(agentId);
@@ -169,6 +194,7 @@ function runCli(args, input, extraEnv = {}, agentId = null, onEvent = null) {
     });
 
     proc.on('error', err => {
+      clearInterval(idleCheck);
       if (done) return;
       done = true;
       reject(err);
@@ -191,9 +217,11 @@ async function sendViaCli({ system, messages, tools, maxTokens, agentId, model =
   let output;
 
   if (canResume) {
-    const args = ['-p', '--output-format', 'stream-json', '--verbose', '--effort', effort, '--dangerously-skip-permissions', '--setting-sources', '', '--resume', session.session_id];
+    const args = ['-p', '--output-format', 'stream-json', '--verbose', '--dangerously-skip-permissions', '--setting-sources', '', '--resume', session.session_id];
+    const extraEnv = {};
+    applyEffort(args, extraEnv, effort);
     try {
-      output = await runCli(args, promptText, {}, agentId, onEvent);
+      output = await runCli(args, promptText, extraEnv, agentId, onEvent);
       return processCliOutput(output, tools);
     } catch (err) {
       if (err.message === 'aborted') throw err;
@@ -216,14 +244,16 @@ async function sendCliFresh({ sysPrompt, messages, promptText, tools, agentId, c
   if (context) fullPrompt += `previous conversation:\n${context}\n\n`;
   fullPrompt += promptText;
 
-  const args = ['-p', '--output-format', 'stream-json', '--verbose', '--model', model, '--effort', effort, '--dangerously-skip-permissions', '--setting-sources', '', '--session-id', sessionId];
+  const args = ['-p', '--output-format', 'stream-json', '--verbose', '--model', model, '--dangerously-skip-permissions', '--setting-sources', '', '--session-id', sessionId];
+  const extraEnv = {};
+  applyEffort(args, extraEnv, effort);
   if (noBuiltinTools) args.push('--tools', '');
   if (sysPrompt) {
     args.push('--system-prompt', sysPrompt);
   }
 
   try {
-    const output = await runCli(args, fullPrompt, {}, agentId, onEvent);
+    const output = await runCli(args, fullPrompt, extraEnv, agentId, onEvent);
 
     if (agentId) {
       stmts.upsertSession.run(agentId, sessionId, currentHash);
@@ -233,9 +263,11 @@ async function sendCliFresh({ sysPrompt, messages, promptText, tools, agentId, c
   } catch (err) {
     if (err.message === 'aborted') throw err;
     if (isContextOverflow(err) && context) {
-      const retryArgs = ['-p', '--output-format', 'stream-json', '--verbose', '--model', model, '--effort', effort, '--dangerously-skip-permissions', '--setting-sources', '', '--session-id', randomUUID()];
+      const retryArgs = ['-p', '--output-format', 'stream-json', '--verbose', '--model', model, '--dangerously-skip-permissions', '--setting-sources', '', '--session-id', randomUUID()];
+      const retryEnv = {};
+      applyEffort(retryArgs, retryEnv, effort);
       if (sysPrompt) retryArgs.push('--system-prompt', sysPrompt);
-      const output = await runCli(retryArgs, promptText, {}, agentId);
+      const output = await runCli(retryArgs, promptText, retryEnv, agentId);
       return processCliOutput(output, tools);
     }
     throw err;
@@ -246,6 +278,13 @@ function processCliOutput(output, tools) {
   const parsed = parseCliOutput(output);
   if (!parsed) throw new Error('claude cli returned empty response');
 
+  const usage = parsed.usage ? {
+    input_tokens: parsed.usage.input_tokens || 0,
+    output_tokens: parsed.usage.output_tokens || 0,
+    cache_read_tokens: parsed.usage.cache_read_input_tokens || 0,
+    cache_write_tokens: parsed.usage.cache_creation_input_tokens || 0
+  } : null;
+
   if (parsed.is_error && parsed.num_turns === 0) {
     throw new Error('cli session error');
   }
@@ -254,23 +293,32 @@ function processCliOutput(output, tools) {
     const text = typeof parsed.result === 'string' && parsed.result.length > 0
       ? parsed.result
       : '';
-    return buildResponse(text, tools);
+    const resp = buildResponse(text, tools);
+    resp.usage = usage;
+    return resp;
   }
 
   if (parsed.result !== undefined && parsed.result !== null && parsed.result !== '') {
     const text = typeof parsed.result === 'string' ? parsed.result : JSON.stringify(parsed.result);
-    return buildResponse(text, tools);
+    const resp = buildResponse(text, tools);
+    resp.usage = usage;
+    return resp;
   }
 
   if (parsed.content) {
+    parsed.usage = usage;
     return parsed;
   }
 
   if (parsed.type === 'result') {
-    return buildResponse('', tools);
+    const resp = buildResponse('', tools);
+    resp.usage = usage;
+    return resp;
   }
 
-  return buildResponse(output, tools);
+  const resp = buildResponse(output, tools);
+  resp.usage = usage;
+  return resp;
 }
 
 function parseCliOutput(output) {
@@ -358,19 +406,6 @@ function hasToolUse(response) {
   return response.stop_reason === 'tool_use';
 }
 
-async function generateQuickAck(userContent, agentName) {
-  const args = ['-p', '--output-format', 'json', '--model', 'haiku', '--dangerously-skip-permissions', '--setting-sources', ''];
-  const prompt = `you are ${agentName}. the user just said: "${userContent}"\n\nacknowledge their message in one casual sentence - show you understood what they want and you're about to start. don't answer or attempt the task, just the acknowledgment. no quotes.`;
-  try {
-    const output = await runCli(args, prompt);
-    const parsed = parseCliOutput(output);
-    if (parsed && typeof parsed.result === 'string' && parsed.result.length > 0) {
-      return parsed.result.trim();
-    }
-  } catch {}
-  return null;
-}
-
 function abort(agentId) {
   const proc = activeProcesses.get(agentId);
   if (proc) {
@@ -381,18 +416,58 @@ function abort(agentId) {
   return false;
 }
 
-async function generateStatus(toolName, elapsedSeconds, agentName) {
-  const mins = Math.floor(elapsedSeconds / 60);
-  const args = ['-p', '--output-format', 'json', '--model', 'haiku', '--dangerously-skip-permissions', '--setting-sources', ''];
-  const prompt = `you are ${agentName}. you've been working for ${mins} minute${mins === 1 ? '' : 's'} and you're currently using ${toolName}. give a one-sentence first-person casual status update for your user. no quotes.`;
+async function probeQuota() {
+  const status = auth.getAuthStatus();
+  if (!status.authenticated) return null;
+
+  const headers = auth.getHeaders();
+  if (!headers) return null;
+  if (headers.authorization) headers['anthropic-beta'] = 'oauth-2025-04-20';
+
   try {
-    const output = await runCli(args, prompt);
-    const parsed = parseCliOutput(output);
-    if (parsed && typeof parsed.result === 'string' && parsed.result.length > 0) {
-      return parsed.result.trim().replace(/^["']|["']$/g, '');
+    const res = await fetch(API_URL, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        model: MODEL,
+        max_tokens: 1,
+        messages: [{ role: 'user', content: 'quota' }]
+      })
+    });
+
+    res.text().catch(() => {});
+    const quota = {};
+    const h = res.headers;
+
+    const session = h.get('anthropic-ratelimit-unified-5h-utilization');
+    if (session !== null) {
+      quota.session = {
+        utilization: parseFloat(session),
+        reset: parseInt(h.get('anthropic-ratelimit-unified-5h-reset') || '0', 10)
+      };
     }
-  } catch {}
-  return null;
+
+    const weekly = h.get('anthropic-ratelimit-unified-7d-utilization');
+    if (weekly !== null) {
+      quota.weekly = {
+        utilization: parseFloat(weekly),
+        reset: parseInt(h.get('anthropic-ratelimit-unified-7d-reset') || '0', 10)
+      };
+    }
+
+    const overageUtil = h.get('anthropic-ratelimit-unified-overage-utilization');
+    if (overageUtil !== null) {
+      quota.overage = {
+        utilization: parseFloat(overageUtil),
+        reset: parseInt(h.get('anthropic-ratelimit-unified-overage-reset') || '0', 10)
+      };
+    }
+
+    if (!quota.session && !quota.weekly) return null;
+    return quota;
+  } catch {
+    return null;
+  }
 }
 
-module.exports = { sendMessage, extractText, extractToolUse, hasToolUse, generateQuickAck, generateStatus, abort };
+module.exports = { sendMessage, extractText, extractToolUse, hasToolUse, abort, probeQuota };

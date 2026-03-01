@@ -4,6 +4,21 @@ const { stmts } = require('../db');
 let cachedCredentials = null;
 
 function readKeychain() {
+  const accounts = [process.env.USER, 'Claude Code'];
+  for (const acct of accounts) {
+    try {
+      const raw = execSync(
+        `security find-generic-password -s "Claude Code-credentials" -a "${acct}" -w`,
+        { encoding: 'utf8', timeout: 5000 }
+      ).trim();
+      const parsed = JSON.parse(raw);
+      const creds = parsed.claudeAiOauth || parsed;
+      if (creds.accessToken && creds.accessToken.startsWith('sk-ant-')) {
+        cachedCredentials = creds;
+        return creds;
+      }
+    } catch {}
+  }
   try {
     const raw = execSync(
       'security find-generic-password -s "Claude Code-credentials" -w',
@@ -64,10 +79,18 @@ function getAuthStatus() {
 }
 
 function getHeaders() {
-  const token = getAccessToken();
-  if (!token) return null;
+  const apiKey = getApiKey();
+  if (apiKey) {
+    return {
+      'x-api-key': apiKey,
+      'content-type': 'application/json',
+      'anthropic-version': '2023-06-01'
+    };
+  }
+  const creds = cachedCredentials || readKeychain();
+  if (!creds || !creds.accessToken) return null;
   return {
-    'x-api-key': token,
+    'authorization': `Bearer ${creds.accessToken}`,
     'content-type': 'application/json',
     'anthropic-version': '2023-06-01'
   };

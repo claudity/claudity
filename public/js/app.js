@@ -2,6 +2,7 @@ let agents = [];
 let activeAgent = null;
 let eventSource = null;
 let connectionsPoller = null;
+let cachedQuota = null;
 
 async function api(method, path, body) {
   const opts = { method, headers: { 'content-type': 'application/json' } };
@@ -34,6 +35,7 @@ const chatInput = $('form[aria-label="input"] textarea');
 const chatSubmit = $('form[aria-label="input"] button[type="submit"]');
 const connectionsBtn = $('button[data-action="connections"]');
 const platformsDiv = $('[data-platforms]');
+const usageBar = $('[data-usage-bar]');
 
 const iconRobot = '<svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><path fill="currentColor" d="M352 0c0-17.7-14.3-32-32-32S288-17.7 288 0l0 64-96 0c-53 0-96 43-96 96l0 224c0 53 43 96 96 96l256 0c53 0 96-43 96-96l0-224c0-53-43-96-96-96l-96 0 0-64zM160 368c0-13.3 10.7-24 24-24l32 0c13.3 0 24 10.7 24 24s-10.7 24-24 24l-32 0c-13.3 0-24-10.7-24-24zm120 0c0-13.3 10.7-24 24-24l32 0c13.3 0 24 10.7 24 24s-10.7 24-24 24l-32 0c-13.3 0-24-10.7-24-24zm120 0c0-13.3 10.7-24 24-24l32 0c13.3 0 24 10.7 24 24s-10.7 24-24 24l-32 0c-13.3 0-24-10.7-24-24zM224 176a48 48 0 1 1 0 96 48 48 0 1 1 0-96zm144 48a48 48 0 1 1 96 0 48 48 0 1 1 -96 0zM64 224c0-17.7-14.3-32-32-32S0 206.3 0 224l0 96c0 17.7 14.3 32 32 32s32-14.3 32-32l0-96zm544-32c-17.7 0-32 14.3-32 32l0 96c0 17.7 14.3 32 32 32s32-14.3 32-32l0-96c0-17.7-14.3-32-32-32z"/></svg>';
 
@@ -144,6 +146,44 @@ function esc(str) {
   return el.innerHTML;
 }
 
+function formatReset(ts) {
+  if (!ts) return '';
+  const d = new Date(ts * 1000);
+  const now = new Date();
+  const sameDay = d.toDateString() === now.toDateString();
+  const time = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  if (sameDay) return `resets ${time}`;
+  const date = d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+  return `resets ${date} ${time}`;
+}
+
+function updateQuotaBar(container, util, reset) {
+  const pct = Math.floor(util * 100);
+  const fill = container.querySelector('[data-quota-fill]');
+  container.querySelector('[data-quota-pct]').textContent = pct + '%';
+  fill.style.width = pct + '%';
+  delete fill.dataset.warn;
+  delete fill.dataset.danger;
+  if (pct >= 90) fill.dataset.danger = '';
+  else if (pct >= 70) fill.dataset.warn = '';
+  container.querySelector('[data-quota-reset]').textContent = formatReset(reset);
+}
+
+function applyQuota(data) {
+  if (!data || !data.available) return;
+  if (data.session) updateQuotaBar($('[data-quota-session]', usageBar), data.session.utilization, data.session.reset);
+  if (data.weekly) updateQuotaBar($('[data-quota-weekly]', usageBar), data.weekly.utilization, data.weekly.reset);
+  if (data.overage) updateQuotaBar($('[data-quota-overage]', usageBar), data.overage.utilization, data.overage.reset);
+}
+
+async function fetchQuota() {
+  try {
+    const data = await api('GET', '/api/quota');
+    cachedQuota = data;
+    applyQuota(data);
+  } catch {}
+}
+
 function renderMarkdown(text) {
   let html = esc(text);
   html = html.replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>');
@@ -248,6 +288,9 @@ async function selectAgent(id) {
   chatInput.value = '';
   chatSubmit.disabled = false;
 
+  usageBar.hidden = false;
+  if (cachedQuota) applyQuota(cachedQuota);
+  fetchQuota();
 
   try {
     const messages = await api('GET', `/api/agents/${id}/messages`);
@@ -400,7 +443,7 @@ function stopActivityTimer() {
 }
 
 function updateToolStatus(toolName) {
-  if (toolName !== currentToolName) { if (currentToolName !== null) toolStartTime = Date.now(); }
+  if (toolName !== currentToolName) toolStartTime = Date.now();
   currentToolName = toolName;
   const activity = showActivity();
   if (!activity) return;
@@ -421,20 +464,7 @@ function updateToolStatus(toolName) {
   scrollToBottom();
 }
 
-function updateStatusSummary(summary) {
-  const activity = showActivity();
-  if (!activity) return;
-  let el = activity.querySelector('[data-summary]');
-  if (!el) {
-    el = document.createElement('p');
-    el.dataset.summary = '';
-    activity.appendChild(el);
-  }
-  el.textContent = summary;
-  const dots = activity.querySelector('[data-dots]');
-  if (dots) dots.remove();
-  scrollToBottom();
-}
+
 
 function connectSSE(agentId) {
   if (eventSource) eventSource.close();
@@ -461,15 +491,6 @@ function connectSSE(agentId) {
     } catch {}
   });
 
-  eventSource.addEventListener('ack_message', (e) => {
-    try {
-      clearActivity();
-      const data = JSON.parse(e.data);
-      appendMessage('assistant', data.content);
-      scrollToBottom();
-    } catch {}
-  });
-
   eventSource.addEventListener('intermediate', (e) => {
     try {
       const data = JSON.parse(e.data);
@@ -486,13 +507,6 @@ function connectSSE(agentId) {
     } catch {}
   });
 
-  eventSource.addEventListener('status_update', (e) => {
-    try {
-      const data = JSON.parse(e.data);
-      updateStatusSummary(data.summary);
-    } catch {}
-  });
-
   eventSource.addEventListener('assistant_message', (e) => {
     try {
       clearActivity();
@@ -501,6 +515,10 @@ function connectSSE(agentId) {
       scrollToBottom();
       chatInput.focus();
     } catch {}
+  });
+
+  eventSource.addEventListener('usage', () => {
+    fetchQuota();
   });
 
   eventSource.addEventListener('user_message', (e) => {
@@ -1335,6 +1353,7 @@ async function init() {
     agents = await api('GET', '/api/agents');
     renderAgents();
     showSection('empty');
+    fetchQuota();
   } catch {
     showSection('setup');
   }

@@ -2,6 +2,7 @@ const { App, LogLevel } = require('@slack/bolt');
 const { WebClient } = require('@slack/web-api');
 
 const MAX_RESPONSE_LENGTH = 3000;
+const EDIT_THROTTLE = 5000;
 
 let app = null;
 
@@ -15,6 +16,10 @@ function parseMessage(text) {
   const match = cleaned.match(/^(\w+):\s*(.+)$/s);
   if (!match) return null;
   return { agent: match[1].toLowerCase(), command: match[2].trim() };
+}
+
+function clamp(text) {
+  return text.length > MAX_RESPONSE_LENGTH ? text.slice(0, MAX_RESPONSE_LENGTH) + '...' : text;
 }
 
 function start(config, callbacks) {
@@ -63,16 +68,39 @@ function start(config, callbacks) {
 
         log(`${parsed.agent}: ${parsed.command}`);
 
+        let statusTs = null;
+        let statusChannel = null;
+        let statusPromise = null;
+        let lastEditTime = 0;
+
         try {
           const result = await chatModule.enqueueMessage(agent.id, parsed.command, {
-            onAck: (text) => say(text).catch(() => {})
+            onAck: (text) => {
+              text = clamp(text);
+              if (!statusPromise) {
+                statusPromise = say(text)
+                  .then(res => { statusTs = res.ts; statusChannel = res.channel; })
+                  .catch(() => {});
+              } else if (Date.now() - lastEditTime >= EDIT_THROTTLE) {
+                lastEditTime = Date.now();
+                statusPromise = statusPromise.then(() => {
+                  if (statusTs) return client.chat.update({ channel: statusChannel, ts: statusTs, text }).catch(() => {});
+                });
+              }
+            }
           });
           if (result && result.content) {
-            let text = result.content;
-            if (text.length > MAX_RESPONSE_LENGTH) {
-              text = text.slice(0, MAX_RESPONSE_LENGTH) + '...';
+            const text = clamp(result.content);
+            if (statusPromise) {
+              await statusPromise;
+              if (statusTs) {
+                await client.chat.update({ channel: statusChannel, ts: statusTs, text }).catch(() => {});
+              } else {
+                await say(text);
+              }
+            } else {
+              await say(text);
             }
-            await say(text);
           }
         } catch (err) {
           await say(`error: ${err.message}`);

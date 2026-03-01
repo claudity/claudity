@@ -353,7 +353,7 @@ async function spawnSubagent(input, context) {
 
   return new Promise((resolve) => {
     let done = false;
-    const args = ['-p', '--output-format', 'json', '--model', model, '--dangerously-skip-permissions'];
+    const args = ['-p', '--output-format', 'json', '--model', model, '--dangerously-skip-permissions', '--setting-sources', ''];
     const proc = spawn('claude', args, {
       stdio: ['pipe', 'pipe', 'pipe']
     });

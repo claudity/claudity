@@ -1,6 +1,7 @@
 const TelegramBot = require('node-telegram-bot-api');
 
 const MAX_RESPONSE_LENGTH = 4000;
+const EDIT_THROTTLE = 5000;
 
 let bot = null;
 
@@ -13,6 +14,10 @@ function parseMessage(text) {
   const match = text.match(/^(\w+):\s*(.+)$/s);
   if (!match) return null;
   return { agent: match[1].toLowerCase(), command: match[2].trim() };
+}
+
+function clamp(text) {
+  return text.length > MAX_RESPONSE_LENGTH ? text.slice(0, MAX_RESPONSE_LENGTH) + '...' : text;
 }
 
 function start(config, callbacks) {
@@ -63,19 +68,40 @@ function start(config, callbacks) {
     log(`${parsed.agent}: ${parsed.command}`);
     bot.sendChatAction(msg.chat.id, 'typing').catch(() => {});
 
+    let statusMsgId = null;
+    let statusPromise = null;
+    let lastEditTime = 0;
+
     try {
       const result = await chatModule.enqueueMessage(agent.id, parsed.command, {
         onAck: (text) => {
-          bot.sendMessage(msg.chat.id, text, { reply_to_message_id: msg.message_id }).catch(() => {});
+          text = clamp(text);
+          if (!statusPromise) {
+            statusPromise = bot.sendMessage(msg.chat.id, text, { reply_to_message_id: msg.message_id })
+              .then(sent => { statusMsgId = sent.message_id; })
+              .catch(() => {});
+          } else if (Date.now() - lastEditTime >= EDIT_THROTTLE) {
+            lastEditTime = Date.now();
+            statusPromise = statusPromise.then(() => {
+              if (statusMsgId) return bot.editMessageText(text, { chat_id: msg.chat.id, message_id: statusMsgId }).catch(() => {});
+            });
+          }
           bot.sendChatAction(msg.chat.id, 'typing').catch(() => {});
         }
       });
+
       if (result && result.content) {
-        let text = result.content;
-        if (text.length > MAX_RESPONSE_LENGTH) {
-          text = text.slice(0, MAX_RESPONSE_LENGTH) + '...';
+        const text = clamp(result.content);
+        if (statusPromise) {
+          await statusPromise;
+          if (statusMsgId) {
+            await bot.editMessageText(text, { chat_id: msg.chat.id, message_id: statusMsgId }).catch(() => {});
+          } else {
+            await bot.sendMessage(msg.chat.id, text, { reply_to_message_id: msg.message_id });
+          }
+        } else {
+          await bot.sendMessage(msg.chat.id, text, { reply_to_message_id: msg.message_id });
         }
-        await bot.sendMessage(msg.chat.id, text, { reply_to_message_id: msg.message_id });
       }
     } catch (err) {
       bot.sendMessage(msg.chat.id, `error: ${err.message}`, { reply_to_message_id: msg.message_id }).catch(() => {});
